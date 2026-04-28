@@ -1,13 +1,26 @@
-import { useState, useEffect } from "react";
+// ═══════════════════════════════════════════════════════════════════
+// EDUMARK AI — COMPLETE APP.JSX
+// Paste this entire file into:  C:\Users\khula\edumark-ai\src\App.jsx
+//
+// BEFORE RUNNING:
+// 1. In Git Bash run:  npm install @supabase/supabase-js
+// 2. Create a file at:  C:\Users\khula\edumark-ai\.env
+//    Add these three lines (replace with your real values):
+//    VITE_SUPABASE_URL=https://your-project.supabase.co
+//    VITE_SUPABASE_ANON_KEY=eyJ...your-anon-key
+//    VITE_ANTHROPIC_API_KEY=sk-ant-...your-key
+//
+// DEMO LOGINS (work immediately, no Supabase needed):
+//   Teacher:  teacher@demo.co.za  /  demo123
+//   Student:  student@demo.co.za  /  demo123
+//   Admin:    admin@edumark.ai    /  admin123
+// ═══════════════════════════════════════════════════════════════
+import { useState, useEffect, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
+import { registerUser, loginUser, loadProfile, searchSchools } from "./registerService.js";
+import { supabase } from "./supabaseClient.js";
 
-/* ═══════════════════════════════════════════════════════════════════
-   EDUMARK AI — COMBINED APP
-   Includes: Landing · Login · Register · Teacher Portal ·
-             Student Portal · Admin Dashboard
-   Admin login: admin@edumark.ai / admin123
-═══════════════════════════════════════════════════════════════════ */
-
-/* ─── DESIGN TOKENS ──────────────────────────────────────────────── */
+// ─── DESIGN TOKENS ───────────────────────────────────────────────
 const G = {
   ink:"#0d1117", inkSoft:"#1e2530", inkMuted:"#3d4a5c",
   paper:"#f5f2eb", paperWarm:"#ede9df", paperDark:"#ddd8cc",
@@ -19,59 +32,117 @@ const G = {
   purple:"#5a3d8a", purplePale:"#ede8f7",
 };
 
-/* ─── GLOBAL CSS ─────────────────────────────────────────────────── */
+// ─── GLOBAL CSS ──────────────────────────────────────────────────
 const css = `
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'DM Sans',sans-serif;background:${G.paper};color:${G.ink};font-size:14px;line-height:1.5;}
+html{-webkit-text-size-adjust:100%;}
+body{font-family:'DM Sans',sans-serif;background:${G.paper};color:${G.ink};font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;}
 h1,h2,h3,h4{font-family:'Syne',sans-serif;line-height:1.2;}
-input,select,textarea{width:100%;padding:9px 12px;border:1.5px solid ${G.paperDark};border-radius:9px;font-family:'DM Sans',sans-serif;font-size:13px;color:${G.ink};background:white;outline:none;transition:border-color .15s;}
+
+/* ── FORMS — larger tap targets on mobile ─────────────────── */
+input,select,textarea{
+  width:100%;padding:11px 13px;border:1.5px solid ${G.paperDark};border-radius:10px;
+  font-family:'DM Sans',sans-serif;font-size:16px;color:${G.ink};background:white;
+  outline:none;transition:border-color .15s;
+  -webkit-appearance:none;appearance:none;
+}
 input:focus,select:focus,textarea:focus{border-color:${G.gold};box-shadow:0 0 0 3px rgba(200,168,75,.1);}
-textarea{resize:vertical;min-height:70px;}
-input[type=radio],input[type=checkbox]{width:auto;accent-color:${G.gold};cursor:pointer;}
-label{display:block;font-size:12px;font-weight:500;margin-bottom:4px;color:${G.ink};}
+textarea{resize:vertical;min-height:80px;}
+input[type=radio],input[type=checkbox]{width:auto;accent-color:${G.gold};cursor:pointer;min-width:18px;min-height:18px;}
+label{display:block;font-size:13px;font-weight:500;margin-bottom:5px;color:${G.ink};}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px;}
+
+/* ── TABLES ───────────────────────────────────────────────── */
 table{width:100%;border-collapse:collapse;}
-th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:${G.inkMuted};padding:8px 14px;border-bottom:1.5px solid ${G.paperDark};font-weight:600;white-space:nowrap;}
-td{padding:10px 14px;border-bottom:1px solid ${G.paperWarm};font-size:13px;vertical-align:middle;}
+th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:${G.inkMuted};padding:8px 12px;border-bottom:1.5px solid ${G.paperDark};font-weight:600;white-space:nowrap;}
+td{padding:10px 12px;border-bottom:1px solid ${G.paperWarm};font-size:13px;vertical-align:middle;}
 tr:last-child td{border-bottom:none;}
-tr:hover td{background:${G.paperWarm};}
-.tbl-wrap{overflow-x:auto;}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+
+/* ── UTILITIES ────────────────────────────────────────────── */
 .pb{height:6px;background:${G.paperDark};border-radius:3px;overflow:hidden;}
 .pb-fill{height:100%;border-radius:3px;transition:width .8s;}
 .divider{height:1.5px;background:${G.paperDark};margin:14px 0;}
 .text-muted{color:${G.inkMuted};font-size:12px;}
 .fg{margin-bottom:14px;}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
-.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
-.flex{display:flex;}.aic{align-items:center;}.jb{justify-content:space-between;}.gap2{gap:8px;}.gap3{gap:12px;}.wrap{flex-wrap:wrap;}
+.flex{display:flex;}.aic{align-items:center;}.jb{justify-content:space-between;}
+.gap2{gap:8px;}.gap3{gap:12px;}.wrap{flex-wrap:wrap;}
 .mb2{margin-bottom:8px;}.mb3{margin-bottom:12px;}.mb4{margin-bottom:16px;}.mt4{margin-top:14px;}
 .fw7{font-weight:700;}
-.tabs{display:flex;border-bottom:1.5px solid ${G.paperDark};margin-bottom:16px;overflow-x:auto;scrollbar-width:none;}
+
+/* ── GRIDS — mobile first ─────────────────────────────────── */
+.g2{display:grid;grid-template-columns:1fr;gap:12px;}
+.g3{display:grid;grid-template-columns:1fr;gap:12px;}
+.g4{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+/* ── TABS ─────────────────────────────────────────────────── */
+.tabs{display:flex;border-bottom:1.5px solid ${G.paperDark};margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .tabs::-webkit-scrollbar{display:none;}
+
+/* ── SIDEBAR ──────────────────────────────────────────────── */
+.sidebar-desktop{display:none;}
+
+/* ── BOTTOM NAV (mobile teacher/student nav) ──────────────── */
+.bottom-nav{
+  display:flex;position:fixed;bottom:0;left:0;right:0;
+  background:${G.ink};border-top:1px solid rgba(255,255,255,.08);
+  z-index:300;height:60px;padding-bottom:env(safe-area-inset-bottom);
+}
+.bottom-nav button{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;border:none;background:transparent;cursor:pointer;
+  font-family:'DM Sans',sans-serif;font-size:10px;color:rgba(255,255,255,.45);
+  padding:8px 4px;transition:color .15s;min-height:44px;
+}
+.bottom-nav button.active{color:${G.gold};}
+.bottom-nav button span.ico{font-size:18px;line-height:1;}
+.main-content-mob{padding-bottom:72px;}
+
+/* ── ANIMATIONS ───────────────────────────────────────────── */
 .fadeUp{animation:fadeUp .2s ease;}
-.sidebar-desktop{display:flex;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 @keyframes pulse2{0%,100%{transform:scale(1)}50%{transform:scale(1.4)}}
 @keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
-@keyframes mIn{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
-@media(max-width:720px){
-  .g4{grid-template-columns:1fr 1fr;}
-  .g3{grid-template-columns:1fr;}
-  .g2{grid-template-columns:1fr;}
-  .hide-mob{display:none!important;}
-  .sidebar-desktop{display:none!important;}
+
+/* ── TABLET ≥ 600px ───────────────────────────────────────── */
+@media(min-width:600px){
+  .g4{grid-template-columns:repeat(2,1fr);gap:12px;}
 }
+
+/* ── AUTH & LANDING GRIDS */
+.auth-grid > div:first-child{display:none;}
+.landing-grid > div:last-child{display:none;}
+/* ── DESKTOP ≥ 900px ──────────────────────────────────────── */
+@media(min-width:900px){
+  .g2{grid-template-columns:1fr 1fr;gap:14px;}
+  .g3{grid-template-columns:repeat(3,1fr);gap:14px;}
+  .g4{grid-template-columns:repeat(4,1fr);gap:12px;}
+  .sidebar-desktop{display:flex;}
+  .bottom-nav{display:none;}
+  .main-content-mob{padding-bottom:0;}
+  .auth-grid{grid-template-columns:1fr 1fr!important;}
+  .auth-grid > div:first-child{display:flex!important;}
+  .landing-grid{grid-template-columns:1fr 1fr!important;}
+  .landing-grid > div:last-child{display:flex!important;}
+  input,select,textarea{font-size:13px;}
+}
+
+/* ── SAFE AREA (iPhone notch) ─────────────────────────────── */
+@supports(padding:max(0px)){
+  .bottom-nav{padding-bottom:max(env(safe-area-inset-bottom),0px);}
+}
+
+/* ── TOUCH IMPROVEMENTS ───────────────────────────────────── */
+button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+a{-webkit-tap-highlight-color:transparent;}
 `;
 
-/* ═══════════════════════════════════════════════════════════════════
-   SHARED PRIMITIVES
-═══════════════════════════════════════════════════════════════════ */
-
+// ─── SHARED PRIMITIVES ────────────────────────────────────────────
 const Btn = ({ children, onClick, variant="ink", sm, full, disabled, style={} }) => {
-  const base = { display:"inline-flex", alignItems:"center", justifyContent:"center", gap:6, padding:sm?"7px 12px":"10px 18px", borderRadius:9, fontFamily:"'DM Sans',sans-serif", fontSize:sm?12:13, fontWeight:500, cursor:disabled?"not-allowed":"pointer", border:"none", transition:"all .15s", whiteSpace:"nowrap", opacity:disabled?.5:1, width:full?"100%":undefined, ...style };
+  const base = { display:"inline-flex", alignItems:"center", justifyContent:"center", gap:6, padding:sm?"10px 14px":"12px 20px", minHeight:44, borderRadius:10, fontFamily:"'DM Sans',sans-serif", fontSize:sm?12:13, fontWeight:500, cursor:disabled?"not-allowed":"pointer", border:"none", transition:"all .15s", whiteSpace:"nowrap", opacity:disabled?.5:1, width:full?"100%":undefined, ...style };
   const v = {
     ink:   { background:G.ink,    color:G.gold },
     gold:  { background:G.gold,   color:G.ink,   fontWeight:600 },
@@ -102,7 +173,6 @@ const Card = ({ children, style={}, onClick }) => (
   <div onClick={onClick} style={{ background:"white", borderRadius:12, border:`1.5px solid ${G.paperDark}`, padding:18, boxShadow:"0 2px 10px rgba(13,17,23,.07)", ...style }}>{children}</div>
 );
 
-// Used in teacher/student panels
 const StatCard = ({ accent, label, value, sub }) => (
   <Card>
     <div style={{ height:3, borderRadius:2, background:accent, marginBottom:10 }} />
@@ -112,7 +182,6 @@ const StatCard = ({ accent, label, value, sub }) => (
   </Card>
 );
 
-// Used in admin panels
 const KpiCard = ({ icon, label, value, sub, change, color=G.gold }) => (
   <Card style={{ position:"relative", overflow:"hidden" }}>
     <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background:color, borderRadius:"12px 12px 0 0" }} />
@@ -186,19 +255,77 @@ const DonutChart = ({ segments, size=80, label }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════════════
-   GEOGRAPHIC & STATIC DATA
-═══════════════════════════════════════════════════════════════════ */
+// ─── GEOGRAPHIC & STATIC DATA ─────────────────────────────────────
 const SA_GEO = {
-  "Gauteng":{code:"GP",districts:{"City of Tshwane":{municipalities:{"Tshwane Central":35,"Tshwane North":30,"Mamelodi":32,"Soshanguve":38}},"City of Johannesburg":{municipalities:{"Johannesburg Central":45,"Soweto":60,"Sandton":40,"Midrand":25}},"Ekurhuleni Metro":{municipalities:{"Boksburg":20,"Benoni":22,"Kempton Park":24}},"West Rand District":{municipalities:{"Mogale City":49,"Rand West City":37}}}},
-  "KwaZulu-Natal":{code:"KZN",districts:{"eThekwini Metro":{municipalities:{"Durban Central":55,"Durban North":38,"Pinetown":25,"Umlazi":35}},"uMgungundlovu District":{municipalities:{"Msunduzi":45,"uMngeni":18}},"King Cetshwayo District":{municipalities:{"uMhlathuze":35}}}},
-  "Western Cape":{code:"WC",districts:{"City of Cape Town":{municipalities:{"Cape Town Central":55,"Cape Town Southern":38,"Khayelitsha":45,"Mitchells Plain":40}},"Cape Winelands District":{municipalities:{"Stellenbosch":30,"Drakenstein":35}},"Eden District":{municipalities:{"George":28,"Mossel Bay":22}}}},
-  "Eastern Cape":{code:"EC",districts:{"Buffalo City Metro":{municipalities:{"Buffalo City":130}},"Nelson Mandela Bay Metro":{municipalities:{"Nelson Mandela Bay":120}},"Amathole District":{municipalities:{"Mnquma":28,"Mbhashe":25}},"OR Tambo District":{municipalities:{"King Sabata Dalindyebo":30}}}},
-  "Limpopo":{code:"LP",districts:{"Capricorn District":{municipalities:{"Polokwane":50,"Lepelle-Nkumpi":22}},"Mopani District":{municipalities:{"Greater Tzaneen":30,"Greater Giyani":25}},"Vhembe District":{municipalities:{"Thulamela":35,"Makhado":30}}}},
-  "Mpumalanga":{code:"MP",districts:{"Ehlanzeni District":{municipalities:{"City of Mbombela":55,"Bushbuckridge":42}},"Nkangala District":{municipalities:{"Emalahleni":38,"Steve Tshwete":28}}}},
-  "Free State":{code:"FS",districts:{"Mangaung Metro":{municipalities:{"Mangaung":97}},"Thabo Mofutsanyana District":{municipalities:{"Maluti-a-Phofung":42}}}},
-  "North West":{code:"NW",districts:{"Bojanala Platinum District":{municipalities:{"Rustenburg":42,"Madibeng":32}},"Dr Kenneth Kaunda District":{municipalities:{"City of Matlosana":42}}}},
-  "Northern Cape":{code:"NC",districts:{"Frances Baard District":{municipalities:{"Sol Plaatje":30}},"ZF Mgcawu District":{municipalities:{"Dawid Kruiper":14}}}},
+  "Eastern Cape": { code:"EC", districts: {
+    "Buffalo City Metro":        { municipalities: {"Buffalo City":130} },
+    "Nelson Mandela Bay Metro":  { municipalities: {"Nelson Mandela Bay":120} },
+    "Amathole District":         { municipalities: {"Amahlathi":18,"Great Kei":8,"Mbhashe":25,"Mnquma":28,"Ngqushwa":15,"Raymond Mhlaba":20} },
+    "Alfred Nzo District":       { municipalities: {"Matatiele":22,"Ntabankulu":16,"Mbizana":20,"Umzimvubu":18} },
+    "Chris Hani District":       { municipalities: {"Emalahleni":20,"Engcobo":18,"Enoch Mgijima":25,"Intsika Yethu":22,"Sakhisizwe":12} },
+    "Joe Gqabi District":        { municipalities: {"Elundini":18,"Senqu":20,"Walter Sisulu":14} },
+    "OR Tambo District":         { municipalities: {"King Sabata Dalindyebo":30,"Mhlontlo":22,"Nyandeni":20,"Port St Johns":16} },
+    "Sarah Baartman District":   { municipalities: {"Blue Crane Route":15,"Makana":20,"Ndlambe":18,"Sundays River Valley":16,"Kouga":22,"Kou-Kamma":10} }
+  }},
+  "Free State": { code:"FS", districts: {
+    "Mangaung Metro":                 { municipalities: {"Mangaung":97} },
+    "Fezile Dabi District":           { municipalities: {"Mafube":14,"Moqhaka":25,"Ngwathe":18,"Nala":12} },
+    "Lejweleputswa District":         { municipalities: {"Masilonyana":15,"Matjhabeng":32,"Nketoana":14,"Tokologo":10,"Tswelopele":12} },
+    "Thabo Mofutsanyana District":    { municipalities: {"Dihlabeng":22,"Maluti-a-Phofung":42,"Mantsopa":14,"Phumelela":12,"Setsoto":18} },
+    "Xhariep District":               { municipalities: {"Kopanong":12,"Letsemeng":10,"Mohokare":10} }
+  }},
+  "Gauteng": { code:"GP", districts: {
+    "City of Johannesburg": { municipalities: {"Johannesburg Central":45,"Johannesburg North":38,"Johannesburg South":32,"Sandton/Alexandra":40,"Soweto":60,"Midrand":25,"Orange Farm":18} },
+    "City of Tshwane":      { municipalities: {"Tshwane Central":35,"Tshwane North":30,"Tshwane South":28,"Tshwane East":25,"Mamelodi":32,"Soshanguve":38,"Atteridgeville":20} },
+    "Ekurhuleni Metro":     { municipalities: {"Germiston":22,"Boksburg":20,"Benoni":22,"Springs":18,"Kempton Park":24,"Alberton":20,"Tembisa":26} },
+    "Sedibeng District":    { municipalities: {"Emfuleni":67,"Lesedi":21,"Midvaal":16} },
+    "West Rand District":   { municipalities: {"Merafong City":33,"Mogale City":49,"Rand West City":37} }
+  }},
+  "KwaZulu-Natal": { code:"KZN", districts: {
+    "eThekwini Metro":           { municipalities: {"eThekwini Central":55,"Durban North":38,"Durban South":32,"Pinetown":25,"Umlazi":35,"KwaMashu":22} },
+    "Amajuba District":          { municipalities: {"Newcastle":30,"eMadlangeni":12,"Dannhauser":15} },
+    "Harry Gwala District":      { municipalities: {"Greater Kokstad":16,"Ingwe":14,"KwaSani":8,"uBuhlebezwe":18} },
+    "iLembe District":           { municipalities: {"KwaDukuza":25,"Maphumulo":14,"Ndwedwe":16,"Mandeni":18} },
+    "King Cetshwayo District":   { municipalities: {"uMhlathuze":35,"uMlalazi":20,"Mthonjaneni":10,"Nkandla":12,"uPhongolo":16} },
+    "uMgungundlovu District":    { municipalities: {"Msunduzi":45,"uMngeni":18,"uMshwathi":16,"Impendle":8,"Mpofana":10,"Richmond":12} },
+    "uMkhanyakude District":     { municipalities: {"Big Five Hlabisa":18,"Jozini":20,"Mtubatuba":16,"uMhlabuyalingana":18} },
+    "uMzinyathi District":       { municipalities: {"Endumeni":14,"Inkosi Langalibalele":18,"Msinga":20,"Nquthu":18} },
+    "uThukela District":         { municipalities: {"Emnambithi/Ladysmith":28,"Imbabazane":16,"Indaka":14,"Inkosi Langalibalele":18} },
+    "Zululand District":         { municipalities: {"AbaQulusi":22,"eDumbe":12,"Nongoma":18,"Ulundi":18,"uPhongolo":16} }
+  }},
+  "Limpopo": { code:"LP", districts: {
+    "Capricorn District":  { municipalities: {"Blouberg":20,"Lepelle-Nkumpi":22,"Molemole":16,"Polokwane":50} },
+    "Mopani District":     { municipalities: {"Ba-Phalaborwa":20,"Greater Giyani":25,"Greater Letaba":22,"Greater Tzaneen":30,"Maruleng":14} },
+    "Sekhukhune District": { municipalities: {"Elias Motsoaledi":28,"Ephraim Mogale":14,"Fetakgomo-Tubatse":28,"Makhuduthamaga":22} },
+    "Vhembe District":     { municipalities: {"Collins Chabane":25,"Makhado":30,"Musina":12,"Thulamela":35} },
+    "Waterberg District":  { municipalities: {"Bela-Bela":18,"Lephalale":22,"Modimolle-Mookgophong":20,"Mogalakwena":35,"Thabazimbi":16} }
+  }},
+  "Mpumalanga": { code:"MP", districts: {
+    "Ehlanzeni District":    { municipalities: {"Bushbuckridge":42,"City of Mbombela":55,"Nkomazi":35,"Thaba Chweu":20} },
+    "Gert Sibande District": { municipalities: {"Chief Albert Luthuli":22,"Dipaleseng":10,"Govan Mbeki":35,"Lekwa":20,"Mkhondo":22,"Msukaligwa":22,"Dr Pixley Ka Isaka Seme":14} },
+    "Nkangala District":     { municipalities: {"Dr JS Moroka":30,"Emalahleni":38,"Steve Tshwete":28,"Thembisile Hani":30,"Victor Khanye":14} }
+  }},
+  "North West": { code:"NW", districts: {
+    "Bojanala Platinum District":         { municipalities: {"Kgetlengrivier":14,"Madibeng":32,"Moretele":22,"Moses Kotane":28,"Rustenburg":42} },
+    "Dr Kenneth Kaunda District":         { municipalities: {"City of Matlosana":42,"JB Marks":35,"Maquassi Hills":18} },
+    "Dr Ruth Segomotsi Mompati District": { municipalities: {"Greater Taung":20,"Kagisano-Molopo":16,"Lekwa-Teemane":12,"Naledi":12} },
+    "Ngaka Modiri Molema District":       { municipalities: {"Ditsobotla":20,"Mahikeng":35,"Ramotshere Moiloa":16,"Ratlou":14,"Tswaing":14} }
+  }},
+  "Northern Cape": { code:"NC", districts: {
+    "Frances Baard District":       { municipalities: {"Dikgatlong":12,"Magareng":10,"Phokwane":12,"Sol Plaatje":30} },
+    "John Taolo Gaetsewe District": { municipalities: {"Ga-Segonyana":16,"Gamagara":10,"Joe Morolong":16} },
+    "Namakwa District":             { municipalities: {"Hantam":10,"Kamiesberg":8,"Karoo Hoogland":8,"Khai-Ma":8,"Richtersveld":6} },
+    "Pixley ka Seme District":      { municipalities: {"Emthanjeni":12,"Kareeberg":8,"Renosterberg":6,"Siyancuma":12,"Siyathemba":10,"Thembelihle":8,"Ubuntu":8,"Umsobomvu":10} },
+    "ZF Mgcawu District":           { municipalities: {"Dawid Kruiper":14,"Kai Garib":12,"Kgatelopele":8} }
+  }},
+  "Western Cape": { code:"WC", districts: {
+    "City of Cape Town":       { municipalities: {"Cape Town Central":55,"Cape Town Northern":40,"Cape Town Southern":38,"Cape Town Eastern":42,"Khayelitsha":45,"Mitchells Plain":40,"Blaauwberg":20,"Helderberg":18} },
+    "Cape Winelands District": { municipalities: {"Breede Valley":28,"Drakenstein":35,"Langeberg":20,"Stellenbosch":30,"Witzenberg":20} },
+    "Central Karoo District":  { municipalities: {"Beaufort West":12,"Laingsburg":6,"Prince Albert":6} },
+    "Eden District":           { municipalities: {"Bitou":12,"George":28,"Hessequa":14,"Kannaland":8,"Knysna":18,"Mossel Bay":22,"Oudtshoorn":18} },
+    "Overberg District":       { municipalities: {"Cape Agulhas":14,"Overstrand":18,"Swellendam":12,"Theewaterskloof":20} },
+    "West Coast District":     { municipalities: {"Bergrivier":16,"Cederberg":10,"Matzikama":12,"Saldanha Bay":22,"Swartland":20} }
+  }},
 };
 
 const SCHOOL_DB_INIT = [
@@ -232,7 +359,6 @@ const DEMO_ASSESSMENTS = [
   }
 ];
 
-/* Admin seed data */
 const ADMIN_SCHOOLS_INIT = [
   {id:"GP-0001",name:"Hoerskool Pretoria Noord",type:"Public Secondary",province:"Gauteng",district:"City of Tshwane",municipality:"Tshwane North",ward:"Ward 12",teachers:8,students:142,plan:"School",status:"active",contact:"012 345 6789",email:"admin@pretorianorth.co.za",joined:"2026-01-10",monthlySubmissions:284},
   {id:"GP-0002",name:"Pretoria High School for Girls",type:"Public Secondary",province:"Gauteng",district:"City of Tshwane",municipality:"Tshwane Central",ward:"Ward 5",teachers:12,students:210,plan:"School",status:"active",contact:"012 456 7890",email:"info@phsg.co.za",joined:"2026-01-12",monthlySubmissions:420},
@@ -260,23 +386,21 @@ const ACTIVITY_LOG = [
   {id:7,type:"plan",msg:"School GP-0001 renewed School plan (R4 500/month)",school:"GP-0001",time:"2 days ago",icon:"💳",severity:"success"},
 ];
 
-/* ─── CLAUDE MARKING ENGINE ──────────────────────────────────────── */
+// ─── DEMO USERS (always work, no Supabase needed) ─────────────────
+const DEMO_USERS = [
+  {id:"u1",email:"teacher@demo.co.za",password:"demo123",role:"teacher",fname:"Nomsa",lname:"Dlamini",sace:"PR 1234567",schools:[{id:"GP-0001",name:"Hoerskool Pretoria Noord"},{id:"GP-0002",name:"Pretoria High School for Girls"}],province:"Gauteng",district:"City of Tshwane",municipality:"Tshwane North",ward:"Ward 12",status:"active",plan:"School",submissions:87,created:"2026-01-15",lastLogin:"2026-04-22"},
+  {id:"u2",email:"student@demo.co.za",password:"demo123",role:"student",fname:"Thabo",lname:"Mokoena",grade:"Grade 11",schools:[{id:"GP-0001",name:"Hoerskool Pretoria Noord"}],province:"Gauteng",district:"City of Tshwane",municipality:"Tshwane North",ward:"Ward 12",status:"active",plan:"School",submissions:12,created:"2026-01-20",lastLogin:"2026-04-23"},
+  {id:"u3",email:"admin@edumark.ai",password:"admin123",role:"admin",fname:"Super",lname:"Admin",schools:[],province:"Gauteng",district:"—",municipality:"—",ward:"—",status:"active",plan:"—",submissions:0,created:"2026-01-01",lastLogin:"2026-04-23"},
+];
+
+// ─── CLAUDE MARKING ENGINE ────────────────────────────────────────
 async function markWithClaude(question, studentAnswer, memo, subject) {
-  const prompt = `You are an experienced South African school examiner marking a ${subject} assessment according to the CAPS curriculum.
-
-QUESTION: ${question.text}
-TOTAL MARKS: ${question.marks}
-MEMORANDUM / MARKING GUIDELINES: ${memo}
-STUDENT'S ANSWER: "${studentAnswer}"
-
-Mark this answer strictly according to the memorandum. Apply method marks where applicable.
-
-Respond ONLY with valid JSON, no markdown:
-{"marks_awarded":<number>,"marks_available":${question.marks},"percentage":<number>,"verdict":"correct"|"partial"|"wrong","feedback":"<specific feedback max 60 words>","method_marks_awarded":<true|false>,"key_elements_present":["<el>"],"key_elements_missing":["<el>"]}`;
-
+  const key = import.meta.env.VITE_ANTHROPIC_API_KEY;
+  if (!key) throw new Error("Missing VITE_ANTHROPIC_API_KEY in .env file");
+  const prompt = `You are an experienced South African school examiner marking a ${subject} assessment according to the CAPS curriculum.\n\nQUESTION: ${question.text}\nTOTAL MARKS: ${question.marks}\nMEMORANDUM / MARKING GUIDELINES: ${memo}\nSTUDENT'S ANSWER: "${studentAnswer}"\n\nMark this answer strictly according to the memorandum. Apply method marks where applicable.\n\nRespond ONLY with valid JSON, no markdown:\n{"marks_awarded":<number>,"marks_available":${question.marks},"percentage":<number>,"verdict":"correct"|"partial"|"wrong","feedback":"<specific feedback max 60 words>","method_marks_awarded":<true|false>,"key_elements_present":["<el>"],"key_elements_missing":["<el>"]}`;
   const res = await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
-    headers:{"Content-Type":"application/json"},
+    headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
     body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:500,messages:[{role:"user",content:prompt}]})
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -285,66 +409,145 @@ Respond ONLY with valid JSON, no markdown:
 }
 
 async function generateStudyPlan(results, assessmentTitle, subject) {
+  const key = import.meta.env.VITE_ANTHROPIC_API_KEY;
+  if (!key) return {recommendations:[{title:"Review your mistakes",detail:"Go through each question you lost marks on and understand why."},{title:"Show all working",detail:"Always write out every step — method marks can save your score."},{title:"Practise regularly",detail:"Consistent daily practice improves retention more than cramming."}]};
   const summary = results.map(r=>({student:r.studentName,pct:Math.round((r.totalMarks/r.totalAvailable)*100)}));
   const avg = Math.round(summary.reduce((s,r)=>s+r.pct,0)/summary.length);
   const res = await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
-    headers:{"Content-Type":"application/json"},
+    headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
     body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:400,messages:[{role:"user",content:`South African CAPS educator. Assessment: "${assessmentTitle}" (${subject}). Results: ${JSON.stringify(summary)}. Class avg: ${avg}%. Generate 3 short actionable recommendations. Respond ONLY with JSON: {"class_average":${avg},"recommendations":[{"title":"<short>","detail":"<1-2 sentences>"},{"title":"","detail":""},{"title":"","detail":""}]}`}]})
   });
   const data = await res.json();
   return JSON.parse(data.content[0].text.trim().replace(/```json|```/g,"").trim());
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   MAIN APP — SINGLE DEFAULT EXPORT
-═══════════════════════════════════════════════════════════════════ */
+// ─── MAIN APP ─────────────────────────────────────────────────────
 export default function EduMarkApp() {
-  const [screen, setScreen] = useState("landing");
-  const [user, setUser] = useState(null);
-  const [toast, setToast] = useState(null);
-  const [users, setUsers] = useState([
-    {id:"u1",email:"teacher@demo.co.za",password:"demo123",role:"teacher",fname:"Nomsa",lname:"Dlamini",sace:"PR 1234567",schools:[{id:"GP-0001",name:"Hoerskool Pretoria Noord"},{id:"GP-0002",name:"Pretoria High School for Girls"}],province:"Gauteng",district:"City of Tshwane",municipality:"Tshwane North",ward:"Ward 12",status:"active",plan:"School",submissions:87,created:"2026-01-15",lastLogin:"2026-04-22"},
-    {id:"u2",email:"student@demo.co.za",password:"demo123",role:"student",fname:"Thabo",lname:"Mokoena",grade:"Grade 11",schools:[{id:"GP-0001",name:"Hoerskool Pretoria Noord"}],province:"Gauteng",district:"City of Tshwane",municipality:"Tshwane North",ward:"Ward 12",status:"active",plan:"School",submissions:12,created:"2026-01-20",lastLogin:"2026-04-23"},
-    {id:"u3",email:"admin@edumark.ai",password:"admin123",role:"admin",fname:"Super",lname:"Admin",schools:[],province:"Gauteng",district:"—",municipality:"—",ward:"—",status:"active",plan:"—",submissions:0,created:"2026-01-01",lastLogin:"2026-04-23"},
-  ]);
-  const [allResults, setAllResults] = useState([]);
-  const [schoolDB, setSchoolDB] = useState(SCHOOL_DB_INIT);
-  const [schoolCounters, setSchoolCounters] = useState({GP:3,KZN:1,WC:2,EC:1});
-  const [adminSchools, setAdminSchools] = useState(ADMIN_SCHOOLS_INIT);
+  const [screen, setScreen]                   = useState("landing");
+  const [user, setUser]                       = useState(null);
+  const [toast, setToast]                     = useState(null);
+  const [users, setUsers]                     = useState(DEMO_USERS);
+  const [allResults, setAllResults]           = useState([]);
+  const [schoolDB, setSchoolDB]               = useState(SCHOOL_DB_INIT);
+  const [schoolCounters, setSchoolCounters]   = useState({GP:3,KZN:1,WC:2,EC:1});
+  const [adminSchools, setAdminSchools]       = useState(ADMIN_SCHOOLS_INIT);
   const [adminAssessments, setAdminAssessments] = useState(ADMIN_ASSESSMENTS_INIT);
+  const [authLoading, setAuthLoading]         = useState(false);
 
   const notify = (msg, type="info") => setToast({msg, type});
   const go = page => { setScreen(page); window.scrollTo(0,0); };
 
-  const login = (email, password) => {
-    const found = users.find(u=>u.email===email && u.password===password);
-    if (!found) return false;
-    setUser(found);
-    if (found.role==="admin") go("admin");
-    else if (found.role==="teacher") go("teacher");
-    else go("student");
-    notify(`Welcome back, ${found.fname}!`, "success");
+  // ── SUPABASE: restore session on page load ──────────────────
+  useEffect(()=>{
+    if (!supabase) return;
+    supabase.auth.getSession().then(async ({ data:{ session } })=>{
+      if (session?.user) {
+        await loadSupabaseProfile(session.user);
+      }
+    });
+    const { data:{ subscription } } = supabase.auth.onAuthStateChange(async (_event, session)=>{
+      if (session?.user) {
+        await loadSupabaseProfile(session.user);
+      }
+    });
+    return () => subscription.unsubscribe();
+  },[]);
+
+  const loadSupabaseProfile = async (supaUser) => {
+    try {
+      const { data, error } = await supabase.from("profiles")
+        .select("*")
+        .eq("id", supaUser.id).single();
+      if (error) { console.warn("loadSupabaseProfile:", error.message); return; }
+      if (data) {
+        let schools = [];
+        try { schools = data.schools_json ? (typeof data.schools_json==="string" ? JSON.parse(data.schools_json) : data.schools_json) : []; } catch(e){schools=[];}
+        const profile = { ...data, id:supaUser.id, email:supaUser.email, schools, submissions:0 };
+        setUser(profile);
+        setUsers(prev => {
+          const exists = prev.find(u=>u.email===profile.email);
+          if (exists) return prev.map(u=>u.email===profile.email?profile:u);
+          return [...prev, profile];
+        });
+        if (screen==="login" || screen==="landing") {
+          if      (profile.role==="teacher") go("teacher");
+          else if (profile.role==="student") go("student");
+          else if (profile.role==="admin")   go("admin");
+        }
+      }
+    } catch(e) { console.error("Profile load error:", e); }
+  };
+
+  // ── LOGIN — tries demo first, then Supabase ─────────────────
+const login = async (email, password) => {
+    const demo = DEMO_USERS.find(u => u.email === email && u.password === password);
+    if (demo) {
+      setUser(demo);
+      if      (demo.role === "admin")   go("admin");
+      else if (demo.role === "teacher") go("teacher");
+      else                              go("student");
+      notify(`Welcome back, ${demo.fname}!`, "success");
+      return true;
+    }
+    const result = await loginUser(email, password);
+    if (!result.success) {
+      notify(result.error || "Invalid email or password", "error");
+      return false;
+    }
+    const profile = result.profile;
+    if (!profile) {
+      notify("Could not load your profile. Please try again.", "error");
+      return false;
+    }
+    setUser(profile);
+    if      (profile.role === "admin")   go("admin");
+    else if (profile.role === "teacher") go("teacher");
+    else                                 go("student");
+    notify(`Welcome back, ${profile.fname}!`, "success");
     return true;
   };
 
-  const register = (newUser) => {
-    const nu = {...newUser, id:"u"+Date.now(), status:"active", submissions:0, created:new Date().toLocaleDateString("en-ZA"), lastLogin:"never", plan:"Trial"};
-    setUsers(prev=>[...prev, nu]);
-    setUser(nu);
-    go(nu.role==="teacher"?"teacher":"student");
-    notify(`Welcome to EduMark AI, ${nu.fname}!`, "success");
+  const register = async (newUser) => {
+    const localProfile = { ...newUser, id:"u"+Date.now(), status:"active", submissions:0,
+      created:new Date().toLocaleDateString("en-ZA"), lastLogin:"just now", plan:"Trial" };
+    setUsers(prev=>[...prev, localProfile]);
+    setUser(localProfile);
+    go(localProfile.role==="teacher"?"teacher":"student");
+    notify(`Welcome to EduMark AI, ${newUser.fname}!`, "success");
+    if (supabase) {
+      supabase.auth.signUp({
+        email: newUser.email.trim().toLowerCase(), password: newUser.password,
+        options: { data: { role:newUser.role||"student", fname:(newUser.fname||"").trim(),
+          lname:(newUser.lname||"").trim(), phone:newUser.phone||null, sace_number:newUser.sace||null,
+          grade:newUser.grade||null, province:newUser.province||null, district:newUser.district||null,
+          municipality:newUser.municipality||null, ward:newUser.ward||null,
+          schools_json:JSON.stringify((newUser.schools||[]).map(s=>({id:s.id||"",name:s.name||"",type:s.type||""}))) } },
+      }).then(({error})=>{ if(error) console.warn("Supabase sync:",error.message); }).catch(e=>console.warn(e.message));
+    }
   };
 
-  const addResult = result => setAllResults(prev=>[...prev, result]);
-  const addSchool = school => { setSchoolDB(prev=>[...prev,school]); setAdminSchools(prev=>[...prev,{...school,teachers:0,students:0,plan:"Trial",status:"trial",contact:"",email:"",joined:new Date().toLocaleDateString("en-ZA"),monthlySubmissions:0}]); };
+const addResult = result => setAllResults(prev=>[...prev, result]);
+  const addSchool = school => {
+    setSchoolDB(prev=>[...prev,school]);
+    setAdminSchools(prev=>[...prev,{...school,teachers:0,students:0,plan:"Trial",status:"trial",contact:"",email:"",joined:new Date().toLocaleDateString("en-ZA"),monthlySubmissions:0}]);
+  };
+
+  // ── LOADING SCREEN while auth resolves ──────────────────────
+  if (authLoading) return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:G.ink, flexDirection:"column", gap:16 }}>
+      <Spinner color={G.gold} />
+      <div style={{ color:"rgba(255,255,255,.5)", fontFamily:"'DM Sans',sans-serif", fontSize:14 }}>Signing in...</div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
 
   return (
     <div style={{ fontFamily:"'DM Sans',sans-serif", background:G.paper, minHeight:"100vh", color:G.ink }}>
       <style>{css}</style>
       {toast && <Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)} />}
       {screen==="landing"  && <Landing onNav={go} />}
-      {screen==="login"    && <LoginPage users={users} onLogin={login} onNav={go} />}
+      {screen==="login"    && <LoginPage onLogin={login} onNav={go} supabase={supabase} />}
       {screen==="register" && <RegisterPage onRegister={register} onNav={go} existingSchools={schoolDB} schoolCounters={schoolCounters} setSchoolCounters={setSchoolCounters} addSchool={addSchool} />}
       {screen==="teacher"  && <TeacherApp user={user} onNav={go} notify={notify} allResults={allResults} />}
       {screen==="student"  && <StudentApp user={user} onNav={go} notify={notify} onAddResult={addResult} allResults={allResults.filter(r=>r.studentEmail===user?.email)} />}
@@ -353,9 +556,9 @@ export default function EduMarkApp() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   LANDING
-═══════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════
+// LANDING
+// ═══════════════════════════════════════════════════════════════════
 function Landing({ onNav }) {
   return (
     <div>
@@ -366,11 +569,11 @@ function Landing({ onNav }) {
           <Btn variant="ink" sm onClick={()=>onNav("register")}>Register Free</Btn>
         </div>
       </nav>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", minHeight:"calc(100vh - 130px)" }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr", minHeight:"calc(100vh - 130px)" }} className="landing-grid">
         <div style={{ padding:"56px 52px", display:"flex", flexDirection:"column", justifyContent:"center" }}>
-          <div style={{ display:"inline-flex", alignItems:"center", gap:6, background:G.goldPale, border:`1px solid ${G.gold}`, padding:"5px 12px", borderRadius:100, fontSize:11, fontWeight:500, letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:20, width:"fit-content" }}>🇿🇦 CAPS Aligned · Real AI Marking</div>
-          <h1 style={{ fontSize:42, fontWeight:800, marginBottom:16, lineHeight:1.05 }}>AI Marking.<br /><span style={{ color:G.gold }}>Instant Results.</span><br />Real Intelligence.</h1>
-          <p style={{ fontSize:15, color:G.inkMuted, maxWidth:420, marginBottom:32, fontWeight:300, lineHeight:1.7 }}>EduMark AI uses Claude to read, understand and mark student answers — applying your rubric, awarding method marks, and giving detailed feedback in seconds.</p>
+          <div style={{ display:"inline-flex", alignItems:"center", gap:6, background:G.goldPale, border:`1px solid ${G.gold}`, padding:"5px 12px", borderRadius:100, fontSize:11, fontWeight:500, letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:20, width:"fit-content" }}>🇿🇦 CAPS Aligned · Real Smart Marking</div>
+          <h1 style={{ fontSize:42, fontWeight:800, marginBottom:16, lineHeight:1.05 }}>Smart Marking.<br /><span style={{ color:G.gold }}>Instant Results.</span><br />Real Intelligence.</h1>
+          <p style={{ fontSize:15, color:G.inkMuted, maxWidth:420, marginBottom:32, fontWeight:300, lineHeight:1.7 }}>EduMark AI reads, understands and marks student answers — applying your rubric, awarding method marks, and giving detailed feedback in seconds.</p>
           <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
             <Btn variant="ink" onClick={()=>onNav("login")}>🎓 Teacher Portal</Btn>
             <Btn variant="gold" onClick={()=>onNav("login")}>📚 Student Portal</Btn>
@@ -378,7 +581,7 @@ function Landing({ onNav }) {
           </div>
           <div className="divider" style={{ marginTop:32 }} />
           <div style={{ display:"flex", gap:28, flexWrap:"wrap" }}>
-            {[["Claude AI","Powers marking"],["CAPS","Curriculum aligned"],["9 Provinces","Full SA coverage"],["POPIA","Compliant"]].map(([n,l])=>(
+            {[["EduMark AI","Powers marking"],["CAPS","Curriculum aligned"],["POPIA","Compliant"]].map(([n,l])=>(
               <div key={n}><div style={{ fontFamily:"Syne,sans-serif", fontSize:15, fontWeight:800 }}>{n}</div><div className="text-muted" style={{ marginTop:2 }}>{l}</div></div>
             ))}
           </div>
@@ -386,7 +589,7 @@ function Landing({ onNav }) {
         <div style={{ background:G.ink, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"44px 36px", position:"relative", overflow:"hidden" }}>
           <div style={{ position:"absolute", top:-60, right:-60, width:260, height:260, background:"radial-gradient(circle,rgba(200,168,75,.15) 0%,transparent 70%)", borderRadius:"50%", pointerEvents:"none" }} />
           <div style={{ color:"rgba(255,255,255,.35)", fontSize:10, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:16, alignSelf:"flex-start" }}>Quick Access</div>
-          {[["🎓","Teacher Portal","Create assessments, configure rubrics, and let Claude AI mark your students' scripts."],["📚","Student Portal","Submit your answers online. Claude AI marks them and gives instant feedback."]].map(([ico,title,desc])=>(
+          {[["🎓","Teacher Portal","Create assessments, configure rubrics, and let EduMark AI mark your students' scripts."],["📚","Student Portal","Submit your answers online. EduMark AI marks them and gives instant feedback."]].map(([ico,title,desc])=>(
             <button key={title} onClick={()=>onNav("login")} style={{ background:"rgba(255,255,255,.05)", border:`1px solid rgba(255,255,255,.08)`, borderRadius:14, padding:20, cursor:"pointer", width:"100%", maxWidth:350, marginBottom:14, transition:"all .2s", textAlign:"left" }}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold;e.currentTarget.style.transform="translateX(6px)";}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,.08)";e.currentTarget.style.transform="translateX(0)";}}>
@@ -404,7 +607,7 @@ function Landing({ onNav }) {
         </div>
       </div>
       <div style={{ display:"flex", borderTop:`1.5px solid ${G.paperDark}`, background:G.paperWarm }}>
-        {[["Claude AI","Powers marking"],["25 000+","SA Schools"],["< 90s","Mark Time"],["R800/mo","Starting Price"]].map(([n,l])=>(
+        {[["Edumark AI","Powers marking"],["25 000+","SA Schools"],["< 90s","Mark Time"],["R150/mo","Starting Price"]].map(([n,l])=>(
           <div key={n} style={{ flex:1, padding:"16px 12px", textAlign:"center", borderRight:`1.5px solid ${G.paperDark}` }}>
             <div style={{ fontFamily:"Syne,sans-serif", fontSize:20, fontWeight:800 }}>{n}</div>
             <div className="text-muted" style={{ marginTop:3 }}>{l}</div>
@@ -415,28 +618,58 @@ function Landing({ onNav }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   LOGIN
-═══════════════════════════════════════════════════════════════════ */
-function LoginPage({ users, onLogin, onNav }) {
-  const [email, setEmail] = useState("teacher@demo.co.za");
-  const [pass, setPass] = useState("demo123");
+// ═══════════════════════════════════════════════════════════════════
+// LOGIN
+// ═══════════════════════════════════════════════════════════════════
+function LoginPage({ onLogin, onNav, supabase }) {
+  const [email, setEmail]       = useState("teacher@demo.co.za");
+  const [pass, setPass]         = useState("demo123");
   const [showPass, setShowPass] = useState(false);
-  const [role, setRole] = useState("teacher");
-  const [error, setError] = useState("");
+  const [role, setRole]         = useState("teacher");
+  const [error, setError]       = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const ROLES = [
-    { id:"teacher", ico:"🎓", label:"Teacher", desc:"Access your dashboard" },
-    { id:"student", ico:"📚", label:"Student", desc:"View your assessments" },
-    { id:"admin",   ico:"⚙️", label:"Admin",   desc:"Platform administration" },
+    { id:"teacher", ico:"🎓", label:"Teacher",  desc:"Access your dashboard" },
+    { id:"student", ico:"📚", label:"Student",  desc:"View your assessments" },
+    { id:"admin",   ico:"⚙️", label:"Admin",    desc:"Platform administration" },
   ];
-  const CREDS = { teacher:"teacher@demo.co.za", student:"student@demo.co.za", admin:"admin@edumark.ai" };
-  const PASSES = { teacher:"demo123", student:"demo123", admin:"admin123" };
+  const CREDS  = { teacher:"teacher@demo.co.za", student:"student@demo.co.za", admin:"admin@edumark.ai" };
+  const PASSES = { teacher:"demo123",            student:"demo123",            admin:"admin123" };
 
   const handleRole = r => { setRole(r); setEmail(CREDS[r]); setPass(PASSES[r]); setError(""); };
 
+  const handleLogin = async () => {
+    if (!email.trim()) { setError("Please enter your email address."); return; }
+    if (!pass)         { setError("Please enter your password."); return; }
+    setError(""); setLoading(true);
+    const ok = await onLogin(email.trim().toLowerCase(), pass);
+    if (!ok) setError("Invalid email or password. Check credentials above.");
+    setLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    if (!supabase) { setError("Password reset requires Supabase to be configured."); return; }
+    if (!email.trim()) { setError("Enter your email address above first."); return; }
+    const { error: e } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin });
+    if (e) setError(e.message);
+    else   setResetSent(true);
+  };
+
+  if (resetSent) return (
+    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:G.paper, padding:24 }}>
+      <Card style={{ maxWidth:420, width:"100%", textAlign:"center", padding:40 }}>
+        <div style={{ fontSize:52, marginBottom:16 }}>📧</div>
+        <div style={{ fontFamily:"Syne,sans-serif", fontSize:22, fontWeight:800, marginBottom:8 }}>Check your email</div>
+        <div style={{ fontSize:14, color:G.inkMuted, marginBottom:24, lineHeight:1.7 }}>We sent a password reset link to <strong>{email}</strong>. Click the link in the email to set a new password.</div>
+        <Btn variant="ghost" full onClick={()=>setResetSent(false)}>Back to Login</Btn>
+      </Card>
+    </div>
+  );
+
   return (
-    <div style={{ minHeight:"100vh", display:"grid", gridTemplateColumns:"1fr 1fr" }}>
+    <div style={{ minHeight:"100vh", display:"grid", gridTemplateColumns:"1fr" }} className="auth-grid">
       <div style={{ background:G.ink, display:"flex", flexDirection:"column", justifyContent:"center", padding:"60px 56px", position:"relative", overflow:"hidden" }}>
         <div style={{ position:"absolute", top:-80, left:-80, width:320, height:320, background:"radial-gradient(circle,rgba(200,168,75,.12) 0%,transparent 70%)", borderRadius:"50%", pointerEvents:"none" }} />
         <Logo onClick={()=>onNav("landing")} />
@@ -465,15 +698,18 @@ function LoginPage({ users, onLogin, onNav }) {
               </div>
             ))}
           </div>
-          <div className="fg"><label>Email Address</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="yourname@school.co.za" /></div>
+          <div className="fg"><label>Email Address</label><input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError("");}} placeholder="yourname@school.co.za" onKeyDown={e=>e.key==="Enter"&&handleLogin()} /></div>
           <div className="fg"><label>Password</label>
             <div style={{ position:"relative" }}>
-              <input type={showPass?"text":"password"} value={pass} onChange={e=>setPass(e.target.value)} style={{ paddingRight:44 }} onKeyDown={e=>e.key==="Enter"&&(!onLogin(email,pass)&&setError("Invalid credentials"))} />
+              <input type={showPass?"text":"password"} value={pass} onChange={e=>{setPass(e.target.value);setError("");}} style={{ paddingRight:44 }} onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
               <button onClick={()=>setShowPass(!showPass)} style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:G.inkMuted, fontSize:14 }}>{showPass?"🙈":"👁"}</button>
             </div>
           </div>
-          {error && <div style={{ background:G.redPale, border:`1px solid #f5c0c2`, borderRadius:8, padding:10, fontSize:12, color:G.red, marginBottom:14, textAlign:"center" }}>{error}</div>}
-          <Btn variant="ink" full onClick={()=>{ if(!onLogin(email,pass)) setError("Invalid email or password."); }} style={{ padding:13 }}>Sign In →</Btn>
+          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:16 }}>
+            <button onClick={handleForgotPassword} style={{ background:"none", border:"none", fontSize:12, color:G.gold, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Forgot password?</button>
+          </div>
+          {error && <div style={{ background:G.redPale, border:`1px solid #f5c0c2`, borderRadius:8, padding:10, fontSize:12, color:G.red, marginBottom:14, textAlign:"center" }}>⚠️ {error}</div>}
+          <Btn variant="ink" full onClick={handleLogin} disabled={loading} style={{ padding:13 }}>{loading?"⏳ Signing in...":"Sign In →"}</Btn>
           <div style={{ display:"flex", alignItems:"center", gap:12, margin:"18px 0", fontSize:12, color:G.inkMuted }}>
             <div style={{ flex:1, height:1, background:G.paperDark }} />or<div style={{ flex:1, height:1, background:G.paperDark }} />
           </div>
@@ -481,27 +717,29 @@ function LoginPage({ users, onLogin, onNav }) {
           <div style={{ fontSize:13, color:G.inkMuted, marginTop:16, textAlign:"center" }}>Back to <button onClick={()=>onNav("landing")} style={{ background:"none", border:"none", color:G.gold, cursor:"pointer", fontWeight:500 }}>Home</button></div>
         </div>
       </div>
+      
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   REGISTER
-═══════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════
+// REGISTER
+// ═══════════════════════════════════════════════════════════════════
 function RegisterPage({ onRegister, onNav, existingSchools, schoolCounters, setSchoolCounters, addSchool }) {
-  const [step, setStep] = useState(0);
-  const [role, setRole] = useState(null);
-  const [form, setForm] = useState({ fname:"", lname:"", email:"", pass:"", pass2:"", phone:"", sace:"", grade:"" });
-  const [loc, setLoc] = useState({ province:"", district:"", municipality:"", ward:"" });
+  const [step, setStep]                     = useState(0);
+  const [role, setRole]                     = useState(null);
+  const [form, setForm]                     = useState({ fname:"", lname:"", email:"", pass:"", pass2:"", phone:"", sace:"", grade:"" });
+  const [loc, setLoc]                       = useState({ province:"", district:"", municipality:"", ward:"" });
   const [selectedSchools, setSelectedSchools] = useState([]);
-  const [schoolSearch, setSchoolSearch] = useState("");
-  const [schoolResults, setSchoolResults] = useState([]);
-  const [newSchool, setNewSchool] = useState({ name:"", type:"", phone:"" });
-  const [error, setError] = useState("");
+  const [schoolSearch, setSchoolSearch]     = useState("");
+  const [schoolResults, setSchoolResults]   = useState([]);
+  const [newSchool, setNewSchool]           = useState({ name:"", type:"", phone:"" });
+  const [error, setError]                   = useState("");
+  const [loading, setLoading]               = useState(false);
 
-  const districts = loc.province ? Object.keys(SA_GEO[loc.province]?.districts||{}) : [];
+  const districts     = loc.province ? Object.keys(SA_GEO[loc.province]?.districts||{}) : [];
   const municipalities = (loc.province&&loc.district) ? Object.keys(SA_GEO[loc.province]?.districts[loc.district]?.municipalities||{}) : [];
-  const wardCount = (loc.province&&loc.district&&loc.municipality) ? (SA_GEO[loc.province]?.districts[loc.district]?.municipalities[loc.municipality]||20) : 20;
+  const wardCount     = (loc.province&&loc.district&&loc.municipality) ? (SA_GEO[loc.province]?.districts[loc.district]?.municipalities[loc.municipality]||20) : 20;
 
   useEffect(()=>{
     if (!schoolSearch||schoolSearch.length<2){setSchoolResults([]);return;}
@@ -509,9 +747,9 @@ function RegisterPage({ onRegister, onNav, existingSchools, schoolCounters, setS
     setSchoolResults(existingSchools.filter(s=>s.name.toLowerCase().includes(q)||s.id.toLowerCase().includes(q)).slice(0,5));
   },[schoolSearch,existingSchools]);
 
-  const next = () => {
+  const next = async () => {
     setError("");
-    if (step===0){if(!role){setError("Please select a role.");return;}setStep(1);}
+    if (step===0){ if(!role){setError("Please select a role.");return;} setStep(1); }
     else if (step===1){
       const{fname,lname,email,pass,pass2,sace,grade}=form;
       if(!fname||!lname||!email||!pass){setError("Please fill in all required fields.");return;}
@@ -527,7 +765,9 @@ function RegisterPage({ onRegister, onNav, existingSchools, schoolCounters, setS
     }
     else if (step===3){
       if(selectedSchools.length===0){setError("Please add at least one school.");return;}
-      onRegister({email:form.email,password:form.pass,role,fname:form.fname,lname:form.lname,schools:selectedSchools,province:loc.province,district:loc.district,municipality:loc.municipality,ward:loc.ward,sace:role==="teacher"?form.sace:null,grade:role==="student"?form.grade:null});
+      setLoading(true);
+      await onRegister({email:form.email,password:form.pass,role,fname:form.fname,lname:form.lname,phone:form.phone,schools:selectedSchools,province:loc.province,district:loc.district,municipality:loc.municipality,ward:loc.ward,sace:role==="teacher"?form.sace:null,grade:role==="student"?form.grade:null});
+      setLoading(false);
     }
   };
 
@@ -554,7 +794,7 @@ function RegisterPage({ onRegister, onNav, existingSchools, schoolCounters, setS
   const steps=["Role","Details","Location","School","Done"];
 
   return (
-    <div style={{ minHeight:"100vh", display:"grid", gridTemplateColumns:"1fr 1fr" }}>
+    <div style={{ minHeight:"100vh", display:"grid", gridTemplateColumns:"1fr" }} className="auth-grid">
       <div style={{ background:G.ink, display:"flex", flexDirection:"column", justifyContent:"center", padding:"60px 56px", position:"relative", overflow:"hidden" }}>
         <div style={{ position:"absolute", top:-80, left:-80, width:320, height:320, background:"radial-gradient(circle,rgba(200,168,75,.12) 0%,transparent 70%)", borderRadius:"50%", pointerEvents:"none" }} />
         <Logo onClick={()=>onNav("landing")} />
@@ -572,7 +812,6 @@ function RegisterPage({ onRegister, onNav, existingSchools, schoolCounters, setS
         <div style={{ maxWidth:460, width:"100%", margin:"0 auto" }}>
           <Logo dark onClick={()=>onNav("landing")} />
           <div style={{ height:20 }} />
-          {/* Step tracker */}
           <div style={{ display:"flex", alignItems:"center", marginBottom:24 }}>
             {steps.map((s,i)=>(
               <div key={s} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", position:"relative" }}>
@@ -583,7 +822,6 @@ function RegisterPage({ onRegister, onNav, existingSchools, schoolCounters, setS
             ))}
           </div>
 
-          {/* Step 0 */}
           {step===0&&<div className="fadeUp">
             <div style={{ fontFamily:"Syne,sans-serif",fontSize:22,fontWeight:800,marginBottom:6 }}>Who are you?</div>
             <div style={{ fontSize:13,color:G.inkMuted,marginBottom:20 }}>Choose your role on EduMark AI</div>
@@ -598,10 +836,9 @@ function RegisterPage({ onRegister, onNav, existingSchools, schoolCounters, setS
             </div>
           </div>}
 
-          {/* Step 1 */}
           {step===1&&<div className="fadeUp">
             <div style={{ fontFamily:"Syne,sans-serif",fontSize:22,fontWeight:800,marginBottom:6 }}>{role==="teacher"?"Teacher Details":"Student Details"}</div>
-            <div style={{ fontSize:13,color:G.inkMuted,marginBottom:20 }}>Your personal information</div>
+            <div style={{ fontSize:13,color:G.inkMuted,marginBottom:16 }}>Your personal information</div>
             <div className="g2"><div className="fg"><label>First Name *</label><input value={form.fname} onChange={e=>setForm(p=>({...p,fname:e.target.value}))} placeholder="e.g. Nomsa"/></div>
             <div className="fg"><label>Surname *</label><input value={form.lname} onChange={e=>setForm(p=>({...p,lname:e.target.value}))} placeholder="e.g. Dlamini"/></div></div>
             <div className="fg"><label>Email Address *</label><input type="email" value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value}))} placeholder="yourname@school.co.za"/></div>
@@ -614,35 +851,30 @@ function RegisterPage({ onRegister, onNav, existingSchools, schoolCounters, setS
             {role==="student"&&<div className="fg"><label>Current Grade *</label><select value={form.grade} onChange={e=>setForm(p=>({...p,grade:e.target.value}))}><option value="">— Select Grade —</option>{["Grade 12","Grade 11","Grade 10","Grade 9","Grade 8","Grade 7"].map(g=><option key={g}>{g}</option>)}</select></div>}
           </div>}
 
-          {/* Step 2 */}
           {step===2&&<div className="fadeUp">
             <div style={{ fontFamily:"Syne,sans-serif",fontSize:22,fontWeight:800,marginBottom:6 }}>Your Location</div>
             <div style={{ background:G.bluePale,border:`1px solid ${G.blueLt}`,borderRadius:9,padding:"11px 13px",marginBottom:16,fontSize:12,color:G.blue }}>📍 <strong>Province → District → Municipality → Ward</strong></div>
             <div className="fg"><label>Province *</label><select value={loc.province} onChange={e=>setLoc({province:e.target.value,district:"",municipality:"",ward:""})}><option value="">— Select Province —</option>{Object.keys(SA_GEO).map(p=><option key={p}>{p}</option>)}</select></div>
             <div className="fg"><label>District Municipality *</label><select value={loc.district} disabled={!loc.province} onChange={e=>setLoc(p=>({...p,district:e.target.value,municipality:"",ward:""}))}><option value="">— Select District —</option>{districts.map(d=><option key={d}>{d}</option>)}</select></div>
             <div className="fg"><label>Local Municipality *</label><select value={loc.municipality} disabled={!loc.district} onChange={e=>setLoc(p=>({...p,municipality:e.target.value,ward:""}))}><option value="">— Select Municipality —</option>{municipalities.map(m=><option key={m}>{m}</option>)}</select></div>
-            <div className="fg"><label>Ward *</label><select value={loc.ward} disabled={!loc.municipality} onChange={e=>setLoc(p=>({...p,ward:e.target.value}))}><option value="">— Select Ward —</option>{loc.municipality&&Array.from({length:wardCount},(_,i)=><option key={i+1}>{`Ward ${i+1}`}</option>)}</select><div className="text-muted" style={{ marginTop:4 }}>2021 Municipal Demarcation Board boundaries</div></div>
+            <div className="fg"><label>Ward *</label><select value={loc.ward} disabled={!loc.municipality} onChange={e=>setLoc(p=>({...p,ward:e.target.value}))}><option value="">— Select Ward —</option>{loc.municipality&&Array.from({length:wardCount},(_,i)=><option key={i+1}>{`Ward ${i+1}`}</option>)}</select></div>
           </div>}
 
-          {/* Step 3 */}
           {step===3&&<div className="fadeUp">
             <div style={{ fontFamily:"Syne,sans-serif",fontSize:22,fontWeight:800,marginBottom:6 }}>Your School{role==="teacher"?"s":""}</div>
             <div style={{ fontSize:13,color:G.inkMuted,marginBottom:16 }}>{role==="teacher"?"Add all schools where you teach.":"Find your school by name or unique number."}</div>
-            {selectedSchools.length>0&&(
-              <div style={{ marginBottom:14 }}>
-                {selectedSchools.map(s=>(
-                  <div key={s.id} style={{ display:"flex",alignItems:"center",gap:8,background:G.greenPale,border:`1px solid #b7e4c7`,borderRadius:8,padding:"8px 12px",marginBottom:8 }}>
-                    <div style={{ fontFamily:"Syne,sans-serif",fontSize:11,fontWeight:700,color:G.green,background:"white",padding:"2px 7px",borderRadius:4,border:`1px solid #b7e4c7` }}>{s.id}</div>
-                    <div style={{ flex:1,fontSize:13,fontWeight:500 }}>{s.name}</div>
-                    <button onClick={()=>setSelectedSchools(p=>p.filter(x=>x.id!==s.id))} style={{ background:"none",border:"none",cursor:"pointer",color:G.red,fontSize:16 }}>×</button>
-                  </div>
-                ))}
-              </div>
-            )}
+            {selectedSchools.length>0&&<div style={{ marginBottom:14 }}>
+              {selectedSchools.map(s=>(
+                <div key={s.id} style={{ display:"flex",alignItems:"center",gap:8,background:G.greenPale,border:`1px solid #b7e4c7`,borderRadius:8,padding:"8px 12px",marginBottom:8 }}>
+                  <div style={{ fontFamily:"Syne,sans-serif",fontSize:11,fontWeight:700,color:G.green,background:"white",padding:"2px 7px",borderRadius:4,border:`1px solid #b7e4c7` }}>{s.id}</div>
+                  <div style={{ flex:1,fontSize:13,fontWeight:500 }}>{s.name}</div>
+                  <button onClick={()=>setSelectedSchools(p=>p.filter(x=>x.id!==s.id))} style={{ background:"none",border:"none",cursor:"pointer",color:G.red,fontSize:16 }}>×</button>
+                </div>
+              ))}
+            </div>}
             <div style={{ position:"relative",marginBottom:16 }}>
               <div className="fg"><label>Search by Name or School Number</label>
                 <input value={schoolSearch} onChange={e=>setSchoolSearch(e.target.value)} placeholder="e.g. Hoerskool Pretoria or GP-0001" autoComplete="off"/>
-                <div className="text-muted" style={{ marginTop:4 }}>Schools have unique IDs like <strong>GP-0001</strong></div>
               </div>
               {schoolResults.length>0&&(
                 <div style={{ position:"absolute",top:"100%",left:0,right:0,background:"white",border:`1.5px solid ${G.gold}`,borderRadius:9,zIndex:50,maxHeight:200,overflowY:"auto",boxShadow:"0 8px 24px rgba(13,17,23,.15)" }}>
@@ -667,37 +899,47 @@ function RegisterPage({ onRegister, onNav, existingSchools, schoolCounters, setS
           {error&&<div style={{ background:G.redPale,border:`1px solid #f5c0c2`,borderRadius:8,padding:10,fontSize:12,color:G.red,marginTop:12,textAlign:"center" }}>{error}</div>}
           <div style={{ display:"flex",justifyContent:"space-between",marginTop:16,gap:10 }}>
             {step>0?<Btn variant="ghost" onClick={()=>{setStep(s=>s-1);setError("");}}>← Back</Btn>:<span/>}
-            <Btn variant={step===3?"green":"ink"} onClick={next}>{step===3?"Complete Registration ✓":"Continue →"}</Btn>
+            <Btn variant={step===3?"green":"ink"} onClick={next} disabled={loading}>{loading?"⏳ Creating account...":step===3?"Complete Registration ✓":"Continue →"}</Btn>
           </div>
           <div style={{ fontSize:13,color:G.inkMuted,marginTop:14,textAlign:"center" }}>Already registered? <button onClick={()=>onNav("login")} style={{ background:"none",border:"none",color:G.gold,cursor:"pointer",fontWeight:500 }}>Sign in</button></div>
         </div>
       </div>
+      
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   TEACHER APP
-═══════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════
+// TEACHER APP
+// ═══════════════════════════════════════════════════════════════════
 function TeacherApp({ user, onNav, notify, allResults }) {
   const [panel, setPanel] = useState("dashboard");
 
   const AppHeader = () => (
-    <header style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px",background:G.ink,borderBottom:`1px solid rgba(255,255,255,.07)`,position:"sticky",top:0,zIndex:200,height:54,gap:10 }}>
+    <header style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",background:G.ink,borderBottom:"1px solid rgba(255,255,255,.07)",position:"sticky",top:0,zIndex:200,height:54,gap:8 }}>
       <Logo onClick={()=>onNav("landing")} />
-      <div style={{ display:"flex",gap:2 }} className="hide-mob">
-        {[["dashboard","Dashboard"],["create","New Assessment"],["mark","Mark Scripts"],["roster","Students"],["analytics","Analytics"]].map(([id,lbl])=>(
-          <button key={id} onClick={()=>setPanel(id)} style={{ padding:"6px 12px",borderRadius:7,border:"none",background:panel===id?"rgba(200,168,75,.1)":"transparent",color:panel===id?G.gold:"rgba(255,255,255,.5)",fontFamily:"'DM Sans',sans-serif",fontSize:13,cursor:"pointer",transition:"all .15s" }}>{lbl}</button>
+      <div style={{ flex:1,display:"flex",justifyContent:"center",gap:2,overflow:"hidden" }} className="sidebar-desktop">
+        {[["dashboard","Dashboard"],["create","New Assessment"],["mark","Mark"],["roster","Students"],["analytics","Analytics"]].map(([id,lbl])=>(
+          <button key={id} onClick={()=>setPanel(id)} style={{ padding:"6px 10px",borderRadius:7,border:"none",background:panel===id?"rgba(200,168,75,.1)":"transparent",color:panel===id?G.gold:"rgba(255,255,255,.5)",fontFamily:"'DM Sans',sans-serif",fontSize:12,cursor:"pointer",transition:"all .15s",whiteSpace:"nowrap" }}>{lbl}</button>
         ))}
       </div>
-      <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-        <button onClick={()=>onNav("landing")} style={{ display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:9,fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:500,cursor:"pointer",border:"none",background:"rgba(255,255,255,0.1)",color:"white" }}>🏠 Home</button>
-        <button onClick={()=>onNav("landing")} style={{ display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,.07)",padding:"5px 10px 5px 6px",borderRadius:100,cursor:"pointer",border:"none" }}>
-          <div style={{ width:26,height:26,borderRadius:"50%",background:G.gold,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:G.ink }}>{user?.fname?.[0]}{user?.lname?.[0]}</div>
-          <span style={{ color:"rgba(255,255,255,.75)",fontSize:12,fontFamily:"'DM Sans',sans-serif" }}>Ms. {user?.lname}</span>
+      <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+        <button onClick={()=>onNav("landing")} style={{ display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,.07)",padding:"5px 8px 5px 6px",borderRadius:100,cursor:"pointer",border:"none" }}>
+          <div style={{ width:28,height:28,borderRadius:"50%",background:G.gold,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:G.ink,flexShrink:0 }}>{user?.fname?.[0]}{user?.lname?.[0]}</div>
+          <span style={{ color:"rgba(255,255,255,.75)",fontSize:12,fontFamily:"'DM Sans',sans-serif",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.fname}</span>
         </button>
       </div>
     </header>
+  );
+
+  const BottomNav = () => (
+    <nav className="bottom-nav">
+      {[["dashboard","⊞","Home"],["create","✚","New"],["mark","✓","Mark"],["roster","👥","Students"],["analytics","📊","Stats"]].map(([id,ico,lbl])=>(
+        <button key={id} onClick={()=>setPanel(id)} className={panel===id?"active":""}>
+          <span className="ico">{ico}</span>{lbl}
+        </button>
+      ))}
+    </nav>
   );
 
   const Sidebar = () => (
@@ -723,12 +965,12 @@ function TeacherApp({ user, onNav, notify, allResults }) {
       <AppHeader />
       <div style={{ display:"flex" }}>
         <Sidebar />
-        <main style={{ flex:1,padding:"22px 26px",overflowY:"auto",background:G.paper,minHeight:"calc(100vh - 54px)" }}>
-          {panel==="dashboard"  && <TeacherDashboard user={user} onNavTo={setPanel} notify={notify} allResults={allResults} />}
+        <main className="main-content-mob" style={{ flex:1,padding:"16px 14px",overflowY:"auto",background:G.paper,minHeight:"calc(100vh - 54px)" }}>
+            {panel==="dashboard"  && <TeacherDashboard user={user} onNavTo={setPanel} notify={notify} allResults={allResults} />}
           {panel==="create"     && <CreateAssessment notify={notify} />}
           {panel==="mark"       && <MarkScripts notify={notify} allResults={allResults} />}
           {panel==="roster"     && <StudentRoster notify={notify} />}
-          {panel==="analytics"  && <AnalyticsPanel allResults={allResults} />}
+          {panel==="analytics"  && <TeacherAnalytics allResults={allResults} />}
           {panel==="reports"    && <ReportsPanel notify={notify} />}
           {panel==="profile"    && <TeacherProfile user={user} notify={notify} />}
         </main>
@@ -753,7 +995,7 @@ function TeacherDashboard({ user, onNavTo, notify, allResults }) {
       </div>
       <div className="g2 mb4">
         <Card>
-          <div className="card-title" style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:12 }}>Recent Assessments</div>
+          <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:12 }}>Recent Assessments</div>
           <div className="tbl-wrap"><table><thead><tr><th>Title</th><th>Subject</th><th>Status</th><th>Due</th></tr></thead>
           <tbody>
             {DEMO_ASSESSMENTS.map(a=><tr key={a.id}><td><strong>{a.title}</strong></td><td>{a.subject}</td><td><Badge type="green">Live</Badge></td><td>{a.due}</td></tr>)}
@@ -795,20 +1037,20 @@ function CreateAssessment({ notify }) {
           <Card>
             <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:12 }}>Assessment Info</div>
             <div className="fg"><label>Title *</label><input placeholder="e.g. Term 2 Mathematics Test"/></div>
-            <div className="g2"><div className="fg"><label>Subject</label><select>{["Mathematics","Physical Science","Life Sciences","English HL","Afrikaans","History","Geography","Accounting","Business Studies"].map(s=><option key={s}>{s}</option>)}</select></div>
+            <div className="g2"><div className="fg"><label>Subject</label><select>{["Mathematics","Physical Science","Life Sciences","English HL","Afrikaans","History","Geography","Accounting"].map(s=><option key={s}>{s}</option>)}</select></div>
             <div className="fg"><label>Grade</label><select>{["Grade 12","Grade 11","Grade 10","Grade 9","Grade 8"].map(g=><option key={g}>{g}</option>)}</select></div></div>
             <div className="g2"><div className="fg"><label>Total Marks</label><input type="number" defaultValue="100"/></div><div className="fg"><label>Duration (mins)</label><input type="number" defaultValue="90"/></div></div>
           </Card>
           <Card>
             <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:12 }}>Question Paper</div>
-            <div style={{ border:`2px dashed ${G.paperDark}`,borderRadius:12,padding:"28px 16px",textAlign:"center",cursor:"pointer",background:G.paperWarm }} onClick={()=>notify("📄 File upload — connect to cloud storage","info")} onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold;e.currentTarget.style.background=G.goldPale;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.paperDark;e.currentTarget.style.background=G.paperWarm;}}>
+            <div style={{ border:`2px dashed ${G.paperDark}`,borderRadius:12,padding:"28px 16px",textAlign:"center",cursor:"pointer",background:G.paperWarm }} onClick={()=>notify("📄 File upload — connect to Supabase Storage","info")} onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold;e.currentTarget.style.background=G.goldPale;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.paperDark;e.currentTarget.style.background=G.paperWarm;}}>
               <div style={{ fontSize:28,marginBottom:8 }}>📄</div>
               <div style={{ fontSize:13,color:G.inkMuted }}><strong>Upload</strong> question paper</div>
             </div>
             <div className="divider"/>
             <div style={{ background:G.bluePale,border:`1px solid ${G.blueLt}`,borderRadius:8,padding:12 }}>
               <div style={{ fontWeight:600,fontSize:12,color:G.blue,marginBottom:4 }}>🤖 Claude AI Marking</div>
-              <div className="text-muted">Claude reads your memorandum and marks submissions intelligently, awarding method marks and generating feedback per question.</div>
+              <div className="text-muted">Claude reads your memorandum and marks submissions intelligently, awarding method marks per question.</div>
             </div>
           </Card>
         </div>
@@ -821,7 +1063,7 @@ function CreateAssessment({ notify }) {
           {rubric.map((row,i)=>(
             <div key={i} style={{ display:"grid",gridTemplateColumns:"30px 1fr 1fr 60px",gap:6,alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${G.paperWarm}` }}>
               <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:12,color:G.inkMuted,textAlign:"center" }}>{row.q}</div>
-              <input type="text" value={row.ans} placeholder="Expected answer or keywords..." style={{ fontSize:11 }} onChange={e=>setRubric(p=>p.map((r,j)=>j===i?{...r,ans:e.target.value}:r))}/>
+              <input type="text" value={row.ans} placeholder="Expected answer..." style={{ fontSize:11 }} onChange={e=>setRubric(p=>p.map((r,j)=>j===i?{...r,ans:e.target.value}:r))}/>
               <input type="text" value={row.memo} placeholder="Notes for Claude AI..." style={{ fontSize:11 }} onChange={e=>setRubric(p=>p.map((r,j)=>j===i?{...r,memo:e.target.value}:r))}/>
               <input type="number" value={row.marks} style={{ fontSize:11 }} onChange={e=>setRubric(p=>p.map((r,j)=>j===i?{...r,marks:e.target.value}:r))}/>
             </div>
@@ -835,8 +1077,8 @@ function CreateAssessment({ notify }) {
           <div className="fg"><label>Late Submission</label><select><option>Block late submissions</option><option>Allow late — deduct 10% per day</option><option>Allow late — no penalty</option></select></div>
         </Card>
         <Card style={{ marginBottom:16 }}><div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:12 }}>Result Release</div>
-          {["Instant — Released immediately after Claude marks","After Due Date — Released after deadline","Scheduled — Released on a specific date","Manual — Teacher reviews AI marks first"].map(opt=>(
-            <label key={opt} style={{ display:"flex",alignItems:"flex-start",gap:9,cursor:"pointer",padding:9,border:`1.5px solid ${G.paperDark}`,borderRadius:8,marginBottom:7,fontSize:13 }}><input type="radio" name="rel" defaultChecked={opt.startsWith("Instant")}/><div><strong>{opt.split("—")[0]}</strong>{"—"+opt.split("—")[1]}</div></label>
+          {["Instant — Released immediately after Claude marks","After Due Date — Released after deadline","Manual — Teacher reviews AI marks first"].map(opt=>(
+            <label key={opt} style={{ display:"flex",alignItems:"flex-start",gap:9,cursor:"pointer",padding:9,border:`1.5px solid ${G.paperDark}`,borderRadius:8,marginBottom:7,fontSize:13 }}><input type="radio" name="rel" defaultChecked={opt.startsWith("Instant")}/><div><strong>{opt.split("—")[0]}</strong>{"— "+opt.split("—")[1]}</div></label>
           ))}
         </Card>
         <div style={{ display:"flex",justifyContent:"space-between" }}><Btn variant="ghost" onClick={()=>setTab(1)}>← Back</Btn><Btn variant="ink" onClick={()=>setTab(3)}>Next: Publish →</Btn></div>
@@ -845,7 +1087,7 @@ function CreateAssessment({ notify }) {
         <Card style={{ border:`2px solid ${G.greenLt}`,marginBottom:16 }}>
           <div className="flex aic gap2 mb4"><div style={{ width:34,height:34,background:G.greenPale,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>✅</div><div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:15 }}>Ready to Publish</div></div>
           <div style={{ background:G.paperWarm,borderRadius:8,padding:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-            {[["Subject","Mathematics · Grade 11"],["Marks","100 · 90 min"],["Classes","64 students"],["Release","Instant with Claude AI feedback"],["Rubric",rubric.length+" questions"],["AI Model","Claude Sonnet 4"]].map(([k,v])=>(
+            {[["Subject","Mathematics · Grade 11"],["Marks","100 marks · 90 min"],["Classes","64 students"],["Release","Instant with Claude AI feedback"],["Rubric",rubric.length+" questions"],["AI Model","Claude Sonnet 4"]].map(([k,v])=>(
               <div key={k}><div className="text-muted">{k}</div><div style={{ fontWeight:500,marginTop:2,fontSize:12 }}>{v}</div></div>
             ))}
           </div>
@@ -876,7 +1118,7 @@ function MarkScripts({ notify, allResults }) {
           )}
         </Card>
         <Card>
-          <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:12 }}>Marking Summary</div>
+          <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:12 }}>Summary</div>
           <div className="flex jb aic" style={{ padding:"12px 0" }}>
             {[[allResults.length,G.greenLt,"AI Marked"],["0",G.gold,"Flagged"],["—",G.inkMuted,"Pending"]].map(([n,c,l])=>(
               <div key={l} style={{ textAlign:"center" }}><div style={{ fontFamily:"Syne,sans-serif",fontSize:28,fontWeight:800,color:c }}>{n}</div><div className="text-muted">{l}</div></div>
@@ -886,7 +1128,7 @@ function MarkScripts({ notify, allResults }) {
           <div className="text-muted" style={{ textAlign:"center",margin:"8px 0 12px" }}>{allResults.length} of 64 students marked</div>
           <div className="divider"/>
           <div style={{ background:G.bluePale,border:`1px solid ${G.blueLt}`,borderRadius:8,padding:10,fontSize:12,color:G.blue,marginBottom:12 }}>
-            🤖 Claude reads each answer against your memorandum, applies method marks, and generates feedback per question — typically under 30 seconds per submission.
+            🤖 Claude reads each answer against your memorandum, applies method marks, and generates feedback per question.
           </div>
           <Btn variant="ink" full onClick={()=>notify("✅ All results released to students!","success")}>Release All Results</Btn>
         </Card>
@@ -901,7 +1143,7 @@ function StudentRoster({ notify }) {
     <div className="fadeUp">
       <div className="flex jb aic wrap gap2" style={{ marginBottom:18 }}>
         <div><div style={{ fontFamily:"Syne,sans-serif",fontSize:22,fontWeight:800 }}>Student Roster</div><div className="text-muted">Manage your classes</div></div>
-        <div style={{ display:"flex",gap:8 }}><Btn variant="ghost" sm onClick={()=>notify("📂 Upload CSV — connect backend","info")}>CSV</Btn><Btn variant="ink" sm onClick={()=>notify("👤 Add student — connect backend","info")}>+ Add</Btn></div>
+        <div style={{ display:"flex",gap:8 }}><Btn variant="ghost" sm onClick={()=>notify("📂 Upload CSV","info")}>CSV</Btn><Btn variant="ink" sm onClick={()=>notify("👤 Add student","info")}>+ Add</Btn></div>
       </div>
       <Card>
         <div style={{ display:"flex",gap:8,marginBottom:12,flexWrap:"wrap" }}><input type="text" placeholder="🔍 Search students..." style={{ maxWidth:220,flex:"1 1 120px" }}/><select style={{ width:140 }}><option>All Classes</option><option>Grade 11A</option><option>Grade 11B</option></select></div>
@@ -912,7 +1154,7 @@ function StudentRoster({ notify }) {
   );
 }
 
-function AnalyticsPanel({ allResults }) {
+function TeacherAnalytics({ allResults }) {
   const avg = allResults.length>0?Math.round(allResults.reduce((s,r)=>s+(r.totalMarks/r.totalAvailable)*100,0)/allResults.length):61;
   return (
     <div className="fadeUp">
@@ -938,7 +1180,7 @@ function AnalyticsPanel({ allResults }) {
         <Card>
           <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:12 }}>Grade Distribution</div>
           <div style={{ display:"flex",alignItems:"flex-end",gap:4,height:100,marginBottom:10 }}>
-            {[["0-29",2,14,G.red],["30-39",4,27,"#c0392b"],["40-49",6,41,G.gold],["50-59",9,63,"#e8c96a"],["60-69",13,100,G.greenLt],["70-79",8,60,G.green],["80+",3,22,"#245a42"]].map(([l,c,h,col])=>(
+            {[["0-29",2,14,G.red],["30-49",6,41,G.gold],["50-59",9,63,"#e8c96a"],["60-69",13,100,G.greenLt],["70-79",8,60,G.green],["80+",3,22,"#245a42"]].map(([l,c,h,col])=>(
               <div key={l} style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",gap:3 }}>
                 <div style={{ fontSize:9,color:G.inkMuted }}>{c}</div>
                 <div style={{ width:"100%",height:h+"%",background:col,borderRadius:"3px 3px 0 0" }}/>
@@ -965,7 +1207,7 @@ function ReportsPanel({ notify }) {
             <div style={{ fontSize:28,marginBottom:8 }}>{ico}</div>
             <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:4 }}>{t}</div>
             <div className="text-muted mb4">{d}</div>
-            <Btn variant="ghost" sm onClick={()=>notify(`📄 Generating ${t}... Connect backend for real downloads`,"info")}>↓ {a}</Btn>
+            <Btn variant="ghost" sm onClick={()=>notify(`📄 Generating ${t}...`,"info")}>↓ {a}</Btn>
           </Card>
         ))}
       </div>
@@ -978,13 +1220,13 @@ function TeacherProfile({ user, notify }) {
     <div className="fadeUp">
       <div className="flex jb aic wrap gap2" style={{ marginBottom:18 }}>
         <div><div style={{ fontFamily:"Syne,sans-serif",fontSize:22,fontWeight:800 }}>My Profile</div><div className="text-muted">Your account and school information</div></div>
-        <Btn variant="ghost" sm onClick={()=>notify("💾 Profile saved — connect backend to persist","success")}>Save Changes</Btn>
+        <Btn variant="ghost" sm onClick={()=>notify("💾 Profile saved","success")}>Save Changes</Btn>
       </div>
       <div className="g2">
         <Card>
           <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:12 }}>Personal Information</div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-            {[["Full Name",`${user?.fname} ${user?.lname}`],["Email",user?.email||"—"],["SACE Number",user?.sace||"N/A"],["Role","Teacher"],["Province",user?.province||"—"],["Ward",user?.ward||"—"]].map(([k,v])=>(
+            {[["Full Name",`${user?.fname||""} ${user?.lname||""}`],["Email",user?.email||"—"],["SACE Number",user?.sace||"N/A"],["Role","Teacher"],["Province",user?.province||"—"],["Ward",user?.ward||"—"]].map(([k,v])=>(
               <div key={k}><div className="text-muted">{k}</div><div style={{ fontWeight:500,marginTop:2,fontSize:13 }}>{v}</div></div>
             ))}
           </div>
@@ -1004,40 +1246,47 @@ function TeacherProfile({ user, notify }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   STUDENT APP
-═══════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════
+// STUDENT APP
+// ═══════════════════════════════════════════════════════════════════
 function StudentApp({ user, onNav, notify, onAddResult, allResults }) {
   const [panel, setPanel] = useState("home");
 
+  const isActive = (id) => panel===id||(panel==="submit"&&id==="home")||(panel==="marking"&&id==="home")||(panel==="result-view"&&id==="results");
+
   const AppHeader = () => (
-    <header style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px",background:G.ink,borderBottom:`1px solid rgba(255,255,255,.07)`,position:"sticky",top:0,zIndex:200,height:54,gap:10 }}>
+    <header style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",background:G.ink,borderBottom:"1px solid rgba(255,255,255,.07)",position:"sticky",top:0,zIndex:200,height:54,gap:8 }}>
       <Logo onClick={()=>onNav("landing")} />
-      <div style={{ display:"flex",gap:2 }}>
-        {[["home","Assessments"],["results","My Results"],["progress","Progress"]].map(([id,lbl])=>(
-          <button key={id} onClick={()=>setPanel(id)} style={{ padding:"6px 12px",borderRadius:7,border:"none",background:(panel===id||(panel==="submit"&&id==="home")||(panel==="marking"&&id==="home")||(panel==="result-view"&&id==="results"))?"rgba(200,168,75,.1)":"transparent",color:(panel===id||(panel==="submit"&&id==="home")||(panel==="marking"&&id==="home")||(panel==="result-view"&&id==="results"))?G.gold:"rgba(255,255,255,.5)",fontFamily:"'DM Sans',sans-serif",fontSize:13,cursor:"pointer",transition:"all .15s" }}>{lbl}</button>
-        ))}
-      </div>
-      <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-        <button onClick={()=>onNav("landing")} style={{ display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:9,fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:500,cursor:"pointer",border:"none",background:"rgba(255,255,255,0.1)",color:"white" }}>🏠 Home</button>
-        <button onClick={()=>onNav("landing")} style={{ display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,.07)",padding:"5px 10px 5px 6px",borderRadius:100,cursor:"pointer",border:"none" }}>
-          <div style={{ width:26,height:26,borderRadius:"50%",background:G.greenLt,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"white" }}>{user?.fname?.[0]}{user?.lname?.[0]}</div>
-          <span style={{ color:"rgba(255,255,255,.75)",fontSize:12,fontFamily:"'DM Sans',sans-serif" }}>{user?.fname} {user?.lname?.[0]}.</span>
+      <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+        <button onClick={()=>onNav("landing")} style={{ display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,.07)",padding:"5px 8px 5px 6px",borderRadius:100,cursor:"pointer",border:"none" }}>
+          <div style={{ width:28,height:28,borderRadius:"50%",background:G.greenLt,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"white",flexShrink:0 }}>{user?.fname?.[0]}{user?.lname?.[0]}</div>
+          <span style={{ color:"rgba(255,255,255,.75)",fontSize:12,fontFamily:"'DM Sans',sans-serif",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.fname}</span>
         </button>
       </div>
     </header>
   );
 
+  const BottomNav = () => (
+    <nav className="bottom-nav">
+      {[["home","📋","Assessments"],["results","📊","Results"],["progress","📈","Progress"]].map(([id,ico,lbl])=>(
+        <button key={id} onClick={()=>setPanel(id)} className={isActive(id)?"active":""}>
+          <span className="ico">{ico}</span>{lbl}
+        </button>
+      ))}
+    </nav>
+  );
+
   return (
     <div>
       <AppHeader />
-      <div style={{ maxWidth:840,margin:"0 auto",padding:"22px 18px 80px",width:"100%" }}>
+      <div className="main-content-mob" style={{ maxWidth:840,margin:"0 auto",padding:"16px 14px 80px",width:"100%" }}>
         {panel==="home"        && <StudentHome user={user} onPanel={setPanel} allResults={allResults}/>}
         {panel==="submit"      && <SubmitAssessment user={user} onPanel={setPanel} notify={notify} onAddResult={onAddResult}/>}
         {panel==="marking"     && <MarkingProgress onPanel={setPanel}/>}
         {panel==="results"     && <ResultsList results={allResults} onPanel={setPanel}/>}
         {panel==="result-view" && <ResultDetail results={allResults} notify={notify}/>}
         {panel==="progress"    && <StudentProgress user={user} results={allResults}/>}
+        <BottomNav />
       </div>
     </div>
   );
@@ -1086,7 +1335,6 @@ function StudentHome({ user, onPanel, allResults }) {
 function SubmitAssessment({ user, onPanel, notify, onAddResult }) {
   const assessment = DEMO_ASSESSMENTS[0];
   const [answers, setAnswers] = useState({});
-  const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [markStep, setMarkStep] = useState(0);
   const [error, setError] = useState("");
@@ -1104,16 +1352,16 @@ function SubmitAssessment({ user, onPanel, notify, onAddResult }) {
           const result=await markWithClaude(q,answers[q.id]||"(No answer provided)",q.memo,assessment.subject);
           results.push({question:q,studentAnswer:answers[q.id],...result});
         } catch(e){
-          results.push({question:q,studentAnswer:answers[q.id]||"",marks_awarded:answers[q.id]?.trim()?Math.floor(q.marks*0.6):0,marks_available:q.marks,percentage:60,verdict:"partial",feedback:"Marking service unavailable — check your API key in the Claude console.",key_elements_present:[],key_elements_missing:[]});
+          results.push({question:q,studentAnswer:answers[q.id]||"",marks_awarded:answers[q.id]?.trim()?Math.floor(q.marks*0.5):0,marks_available:q.marks,percentage:50,verdict:"partial",feedback:"Marking service unavailable — check your VITE_ANTHROPIC_API_KEY in the .env file.",key_elements_present:[],key_elements_missing:[]});
         }
       }
       setMarkStep(steps.length-1);
       await new Promise(r=>setTimeout(r,500));
       const totalMarks=results.reduce((s,r)=>s+(r.marks_awarded||0),0);
       const totalAvailable=results.reduce((s,r)=>s+r.marks_available,0);
-      onAddResult({assessmentId:assessment.id,assessmentTitle:assessment.title,studentEmail:user.email,studentName:`${user.fname} ${user.lname}`,totalMarks,totalAvailable,questionResults:results,timestamp:new Date().toISOString(),markedBy:"Claude AI (claude-sonnet-4-20250514)"});
+      onAddResult({assessmentId:assessment.id,assessmentTitle:assessment.title,studentEmail:user?.email,studentName:`${user?.fname||"Student"} ${user?.lname||""}`,totalMarks,totalAvailable,questionResults:results,timestamp:new Date().toISOString(),markedBy:"Claude AI (claude-sonnet-4-20250514)"});
       setLoading(false); onPanel("result-view");
-    } catch(err){ setLoading(false); setError("An error occurred. Check your internet connection."); }
+    } catch(err){ setLoading(false); setError("An error occurred. Check console for details."); }
   };
 
   if (loading) return (
@@ -1150,7 +1398,7 @@ function SubmitAssessment({ user, onPanel, notify, onAddResult }) {
         </div>
         <div className="divider"/>
         <div style={{ background:G.paperWarm,padding:10,borderRadius:8,fontSize:12,color:G.inkMuted }}><strong>Instructions:</strong> {assessment.instructions}</div>
-        <div style={{ background:G.goldPale,border:`1px solid ${G.gold}`,borderRadius:8,padding:10,marginTop:10,fontSize:12 }}>🤖 <strong>Claude AI Marking:</strong> Your answers will be marked by Claude AI against your teacher's memorandum. Method marks are awarded automatically. You'll receive detailed feedback per question.</div>
+        <div style={{ background:G.goldPale,border:`1px solid ${G.gold}`,borderRadius:8,padding:10,marginTop:10,fontSize:12 }}>🤖 <strong>Claude AI Marking:</strong> Your answers will be marked by Claude AI against your teacher's memorandum. Method marks are awarded automatically.</div>
       </Card>
       <div style={{ marginBottom:16 }}>
         {assessment.questions.map(q=>(
@@ -1220,7 +1468,7 @@ function ResultDetail({ results, notify }) {
       const data = await generateStudyPlan([r], r.assessmentTitle, "Mathematics");
       setInsights(data);
     } catch(e) {
-      setInsights({recommendations:[{title:"Review your mistakes",detail:"Go through each question you lost marks on and understand why."},{title:"Show all working",detail:"Always write out every step — method marks can save your score."},{title:"Practise regularly",detail:"Consistent daily practice improves retention more than cramming."}]});
+      setInsights({recommendations:[{title:"Review your mistakes",detail:"Go through each question you lost marks on and understand why the answer was wrong."},{title:"Show all working",detail:"Always write out every step — method marks can save your score even when the final answer is wrong."},{title:"Practise regularly",detail:"Consistent daily practice improves retention far more than cramming before tests."}]});
     }
     setLoadingInsights(false);
   };
@@ -1259,7 +1507,7 @@ function ResultDetail({ results, notify }) {
             <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,color:qr.verdict==="correct"?G.green:qr.verdict==="partial"?G.gold:G.red,flexShrink:0,marginLeft:8 }}>{qr.marks_awarded}/{qr.marks_available}</div>
           </div>
           <div style={{ background:G.paperWarm,padding:"7px 11px",borderRadius:6,fontSize:12,marginBottom:6 }}>📝 <em>Your answer: {qr.studentAnswer?.slice(0,120)}{qr.studentAnswer?.length>120?"...":""}</em></div>
-          {qr.verdict!=="correct"&&<div style={{ background:G.redPale,padding:"7px 11px",borderRadius:6,fontSize:12,marginBottom:6,color:G.red }}>Missing: {qr.key_elements_missing?.join(", ")||"See feedback below"}</div>}
+          {qr.verdict!=="correct"&&qr.key_elements_missing?.length>0&&<div style={{ background:G.redPale,padding:"7px 11px",borderRadius:6,fontSize:12,marginBottom:6,color:G.red }}>Missing: {qr.key_elements_missing.join(", ")}</div>}
           {qr.verdict==="correct"&&<div style={{ background:G.greenPale,padding:"7px 11px",borderRadius:6,fontSize:12,marginBottom:6,color:G.green }}>✅ Elements present: {qr.key_elements_present?.join(", ")}</div>}
           <div style={{ fontSize:12,color:G.inkMuted,fontStyle:"italic" }}>💬 <strong>Claude AI:</strong> {qr.feedback}</div>
           {qr.method_marks_awarded&&<div style={{ fontSize:11,background:G.goldPale,padding:"4px 8px",borderRadius:6,marginTop:6,display:"inline-block",color:"#8a6d10" }}>⭐ Method marks awarded</div>}
@@ -1313,9 +1561,9 @@ function StudentProgress({ user, results }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   ADMIN APP
-═══════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════
+// ADMIN APP
+// ═══════════════════════════════════════════════════════════════════
 function AdminApp({ user, onNav, notify, users, setUsers, adminSchools, setAdminSchools, adminAssessments, setAdminAssessments, allResults }) {
   const [panel, setPanel] = useState("overview");
   const [modal, setModal] = useState(null);
@@ -1343,7 +1591,6 @@ function AdminApp({ user, onNav, notify, users, setUsers, adminSchools, setAdmin
 
   return (
     <div style={{ display:"flex",minHeight:"100vh",background:G.ink,fontFamily:"'DM Sans',sans-serif" }}>
-      {/* Sidebar */}
       <aside className="sidebar-desktop" style={{ width:sidebarOpen?220:64,background:"#080c11",borderRight:"1px solid rgba(255,255,255,.06)",padding:"0 0 24px",display:"flex",flexDirection:"column",transition:"width .2s",overflowX:"hidden",flexShrink:0,minHeight:"100vh" }}>
         <div style={{ padding:"18px 16px 14px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",gap:8,cursor:"pointer" }} onClick={()=>setSidebarOpen(!sidebarOpen)}>
           <div style={{ width:32,height:32,background:G.gold,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",color:G.ink,fontSize:14,fontWeight:800,flexShrink:0 }}>E</div>
@@ -1384,9 +1631,8 @@ function AdminApp({ user, onNav, notify, users, setUsers, adminSchools, setAdmin
         </div>}
       </aside>
 
-      {/* Main content */}
       <div style={{ flex:1,display:"flex",flexDirection:"column",background:G.paper,minHeight:"100vh",overflow:"auto" }}>
-        <header style={{ background:"white",borderBottom:`1.5px solid ${G.paperDark}`,padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:54,position:"sticky",top:0,zIndex:100,gap:12,flexShrink:0 }}>
+        <header style={{ background:"white",borderBottom:`1.5px solid ${G.paperDark}`,padding:"0 14px",display:"flex",alignItems:"center",justifyContent:"space-between",height:54,position:"sticky",top:0,zIndex:100,gap:8,flexShrink:0,flexWrap:"wrap" }}>
           <div style={{ display:"flex",alignItems:"center",gap:12 }}>
             <div style={{ fontFamily:"Syne,sans-serif",fontSize:16,fontWeight:800,color:G.ink }}>{NAV.find(n=>n.id===panel)?.label||"Admin"}</div>
             <div style={{ fontSize:11,color:G.inkMuted,background:G.paperWarm,padding:"2px 10px",borderRadius:100 }}>EduMark AI Administration</div>
@@ -1423,21 +1669,18 @@ function AdminApp({ user, onNav, notify, users, setUsers, adminSchools, setAdmin
   );
 }
 
-/* ── ADMIN PANELS ────────────────────────────────────────────────── */
-
 function AdminOverview({ users, schools, assessments, notify, openModal, setPanel, totalRevenue, allResults }) {
   const activeSchools  = schools.filter(s=>s.status==="active").length;
   const activeTeachers = users.filter(u=>u.role==="teacher"&&u.status==="active").length;
   const activeStudents = users.filter(u=>u.role==="student"&&u.status==="active").length;
   const totalMarked    = assessments.reduce((s,a)=>s+a.marked,0);
   const pending        = [...schools.filter(s=>s.status==="pending"), ...users.filter(u=>u.status==="pending")];
-
   return (
     <div className="fadeUp">
       <div className="flex jb aic wrap gap2" style={{ marginBottom:20 }}>
         <div><div style={{ fontFamily:"Syne,sans-serif",fontSize:22,fontWeight:800 }}>Platform Overview</div><div className="text-muted">EduMark AI — Global administration dashboard</div></div>
         <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
-          <Btn variant="ghost" sm onClick={()=>notify("📊 Generating full platform report...","info")}>Export Report</Btn>
+          <Btn variant="ghost" sm onClick={()=>notify("📊 Generating platform report...","info")}>Export Report</Btn>
           <Btn variant="ink" sm onClick={()=>openModal("addSchool")}>+ Add School</Btn>
         </div>
       </div>
@@ -1457,7 +1700,7 @@ function AdminOverview({ users, schools, assessments, notify, openModal, setPane
         <Card>
           <div className="flex jb aic mb3"><div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14 }}>Schools by Plan</div><button onClick={()=>setPanel("schools")} style={{ fontSize:12,color:G.gold,background:"none",border:"none",cursor:"pointer" }}>View all →</button></div>
           <div style={{ display:"flex",alignItems:"center",gap:20 }}>
-            <DonutChart size={100} label={{ main:schools.length,sub:"schools" }} segments={[{value:schools.filter(s=>s.plan==="School").length,color:G.greenLt},{value:schools.filter(s=>s.plan==="Starter").length,color:G.gold},{value:schools.filter(s=>!["School","Starter"].includes(s.plan)).length,color:G.blueLt}]}/>
+            <DonutChart size={100} label={{ main:schools.length,sub:"schools" }} segments={[{value:schools.filter(s=>s.plan==="School").length||1,color:G.greenLt},{value:schools.filter(s=>s.plan==="Starter").length||1,color:G.gold},{value:schools.filter(s=>!["School","Starter"].includes(s.plan)).length||1,color:G.blueLt}]}/>
             <div style={{ flex:1 }}>
               {[["School Plan",schools.filter(s=>s.plan==="School").length,G.greenLt,"R4 500/mo"],["Starter Plan",schools.filter(s=>s.plan==="Starter").length,G.gold,"R800/mo"],["Trial / Pending",schools.filter(s=>!["School","Starter"].includes(s.plan)).length,G.blueLt,"Free"]].map(([l,c,col,note])=>(
                 <div key={l} style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
@@ -1475,7 +1718,7 @@ function AdminOverview({ users, schools, assessments, notify, openModal, setPane
           {[["Gauteng",schools.filter(s=>s.province==="Gauteng").length,G.gold],["KwaZulu-Natal",schools.filter(s=>s.province==="KwaZulu-Natal").length,G.greenLt],["Western Cape",schools.filter(s=>s.province==="Western Cape").length,G.blueLt],["Other",schools.filter(s=>!["Gauteng","KwaZulu-Natal","Western Cape"].includes(s.province)).length,G.inkMuted]].map(([p,c,col])=>(
             <div key={p} style={{ marginBottom:10 }}>
               <div className="flex jb mb2" style={{ fontSize:12 }}><span>{p}</span><span style={{ fontWeight:700 }}>{c}</span></div>
-              <div className="pb"><div className="pb-fill" style={{ width:`${(c/schools.length)*100}%`,background:col }}/></div>
+              <div className="pb"><div className="pb-fill" style={{ width:`${schools.length>0?(c/schools.length)*100:0}%`,background:col }}/></div>
             </div>
           ))}
         </Card>
@@ -1514,11 +1757,10 @@ function AdminUsers({ users, setUsers, notify, openModal, closeModal, modal, sea
   const [editUser, setEditUser] = useState(null);
   const filtered = users.filter(u=>{
     const q=search.toLowerCase();
-    const ms=!q||`${u.fname} ${u.lname} ${u.email} ${u.school||""}`.toLowerCase().includes(q);
+    const ms=!q||`${u.fname} ${u.lname} ${u.email}`.toLowerCase().includes(q);
     const mf=filter==="all"||u.role===filter||u.status===filter;
     return ms&&mf&&u.role!=="admin";
   });
-
   return (
     <div className="fadeUp">
       <div className="flex jb aic wrap gap2 mb4">
@@ -1540,30 +1782,28 @@ function AdminUsers({ users, setUsers, notify, openModal, closeModal, modal, sea
         ))}
       </div>
       <Card>
-        <div className="tbl-wrap">
-          <table>
-            <thead><tr><th>Name</th><th>Role</th><th>School</th><th>Province</th><th>Plan</th><th>Status</th><th>Submissions</th><th>Actions</th></tr></thead>
-            <tbody>{filtered.map(u=>(
-              <tr key={u.id}>
-                <td><div style={{ display:"flex",alignItems:"center",gap:8 }}>
-                  <div style={{ width:30,height:30,borderRadius:"50%",background:u.role==="teacher"?G.goldPale:G.greenPale,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:u.role==="teacher"?"#8a6d10":G.green,flexShrink:0 }}>{u.fname[0]}{u.lname[0]}</div>
-                  <div><div style={{ fontWeight:600,fontSize:13 }}>{u.fname} {u.lname}</div><div style={{ fontSize:11,color:G.inkMuted }}>{u.email}</div></div>
-                </div></td>
-                <td><Badge type={u.role==="teacher"?"gold":"blue"}>{u.role}</Badge></td>
-                <td style={{ fontSize:12 }}>{u.schools?.[0]?.id||"—"}</td>
-                <td style={{ fontSize:12 }}>{u.province}</td>
-                <td><Badge type={u.plan==="School"?"green":u.plan==="Starter"?"gold":"gray"}>{u.plan||"Trial"}</Badge></td>
-                <td><Badge type={u.status==="active"?"green":u.status==="pending"?"orange":"gray"} dot>{u.status}</Badge></td>
-                <td style={{ fontFamily:"Syne,sans-serif",fontWeight:700 }}>{u.submissions}</td>
-                <td><div style={{ display:"flex",gap:4 }}>
-                  <Btn variant="ghost" sm onClick={()=>{setEditUser(u);openModal("editUser");}}>Edit</Btn>
-                  {u.status==="pending"&&<Btn variant="green" sm onClick={()=>{setUsers(p=>p.map(x=>x.id===u.id?{...x,status:"active"}:x));notify("✅ User approved","success");}}>Approve</Btn>}
-                  <Btn variant="danger" sm onClick={()=>{setUsers(p=>p.filter(x=>x.id!==u.id));notify("🗑️ User removed","info");}}>Remove</Btn>
-                </div></td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
+        <div className="tbl-wrap"><table>
+          <thead><tr><th>Name</th><th>Role</th><th>School</th><th>Province</th><th>Plan</th><th>Status</th><th>Submissions</th><th>Actions</th></tr></thead>
+          <tbody>{filtered.map(u=>(
+            <tr key={u.id}>
+              <td><div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                <div style={{ width:30,height:30,borderRadius:"50%",background:u.role==="teacher"?G.goldPale:G.greenPale,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:u.role==="teacher"?"#8a6d10":G.green,flexShrink:0 }}>{u.fname?.[0]}{u.lname?.[0]}</div>
+                <div><div style={{ fontWeight:600,fontSize:13 }}>{u.fname} {u.lname}</div><div style={{ fontSize:11,color:G.inkMuted }}>{u.email}</div></div>
+              </div></td>
+              <td><Badge type={u.role==="teacher"?"gold":"blue"}>{u.role}</Badge></td>
+              <td style={{ fontSize:12 }}>{u.schools?.[0]?.id||"—"}</td>
+              <td style={{ fontSize:12 }}>{u.province}</td>
+              <td><Badge type={u.plan==="School"?"green":u.plan==="Starter"?"gold":"gray"}>{u.plan||"Trial"}</Badge></td>
+              <td><Badge type={u.status==="active"?"green":u.status==="pending"?"orange":"gray"} dot>{u.status}</Badge></td>
+              <td style={{ fontFamily:"Syne,sans-serif",fontWeight:700 }}>{u.submissions||0}</td>
+              <td><div style={{ display:"flex",gap:4 }}>
+                <Btn variant="ghost" sm onClick={()=>{setEditUser(u);openModal("editUser");}}>Edit</Btn>
+                {u.status==="pending"&&<Btn variant="green" sm onClick={()=>{setUsers(p=>p.map(x=>x.id===u.id?{...x,status:"active"}:x));notify("✅ User approved","success");}}>Approve</Btn>}
+                <Btn variant="danger" sm onClick={()=>{setUsers(p=>p.filter(x=>x.id!==u.id));notify("🗑️ User removed","info");}}>Remove</Btn>
+              </div></td>
+            </tr>
+          ))}</tbody>
+        </table></div>
       </Card>
       <Modal open={modal?.name==="editUser"} onClose={closeModal} title="Edit User">
         {editUser&&<div>
@@ -1571,7 +1811,7 @@ function AdminUsers({ users, setUsers, notify, openModal, closeModal, modal, sea
           <div className="fg"><label>Email</label><input type="email" defaultValue={editUser.email} onChange={e=>setEditUser(p=>({...p,email:e.target.value}))}/></div>
           <div className="g2"><div className="fg"><label>Role</label><select defaultValue={editUser.role} onChange={e=>setEditUser(p=>({...p,role:e.target.value}))}><option value="teacher">Teacher</option><option value="student">Student</option></select></div>
           <div className="fg"><label>Status</label><select defaultValue={editUser.status} onChange={e=>setEditUser(p=>({...p,status:e.target.value}))}><option>active</option><option>inactive</option><option>pending</option></select></div></div>
-          <div className="fg"><label>Plan</label><select defaultValue={editUser.plan} onChange={e=>setEditUser(p=>({...p,plan:e.target.value}))}><option>School</option><option>Starter</option><option>Trial</option></select></div>
+          <div className="fg"><label>Plan</label><select defaultValue={editUser.plan||"Trial"} onChange={e=>setEditUser(p=>({...p,plan:e.target.value}))}><option>School</option><option>Starter</option><option>Trial</option></select></div>
           {editUser.role==="teacher"&&<div className="fg"><label>SACE Number</label><input defaultValue={editUser.sace||""} onChange={e=>setEditUser(p=>({...p,sace:e.target.value}))}/></div>}
           <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:8 }}>
             <Btn variant="ghost" onClick={closeModal}>Cancel</Btn>
@@ -1611,22 +1851,21 @@ function AdminSchools({ schools, setSchools, notify, openModal, closeModal, moda
         <KpiCard icon="✅" label="Active" value={schools.filter(s=>s.status==="active").length} sub="Paying" color={G.greenLt} />
         <KpiCard icon="🔬" label="On Trial" value={schools.filter(s=>s.status==="trial").length} sub="Free 30 days" color={G.blueLt} />
         <KpiCard icon="⏳" label="Pending" value={schools.filter(s=>s.status==="pending").length} sub="Awaiting review" color={G.orange} />
-        <KpiCard icon="👥" label="Total Users" value={schools.reduce((s,x)=>s+x.teachers+x.students,0)} sub="Across all schools" color={G.gold} />
+        <KpiCard icon="👥" label="Total Users" value={schools.reduce((s,x)=>s+(x.teachers||0)+(x.students||0),0)} sub="Across all schools" color={G.gold} />
       </div>
       <Card>
         <div className="tbl-wrap"><table>
-          <thead><tr><th>ID</th><th>School Name</th><th>Province</th><th>Type</th><th>Teachers</th><th>Students</th><th>Plan</th><th>Status</th><th>Submissions/mo</th><th>Actions</th></tr></thead>
+          <thead><tr><th>ID</th><th>School Name</th><th>Province</th><th>Teachers</th><th>Students</th><th>Plan</th><th>Status</th><th>Submissions/mo</th><th>Actions</th></tr></thead>
           <tbody>{filtered.map(s=>(
             <tr key={s.id}>
               <td><span style={{ fontFamily:"Syne,sans-serif",fontSize:11,fontWeight:700,color:G.gold,background:G.ink,padding:"2px 7px",borderRadius:4 }}>{s.id}</span></td>
               <td><div style={{ fontWeight:600,fontSize:13 }}>{s.name}</div><div style={{ fontSize:11,color:G.inkMuted }}>{s.district}</div></td>
               <td style={{ fontSize:12 }}>{s.province}</td>
-              <td style={{ fontSize:11,color:G.inkMuted }}>{s.type}</td>
-              <td style={{ textAlign:"center",fontWeight:700 }}>{s.teachers}</td>
-              <td style={{ textAlign:"center",fontWeight:700 }}>{s.students}</td>
-              <td><Badge type={s.plan==="School"?"green":s.plan==="Starter"?"gold":s.plan==="Trial"?"blue":"gray"}>{s.plan}</Badge></td>
+              <td style={{ textAlign:"center",fontWeight:700 }}>{s.teachers||0}</td>
+              <td style={{ textAlign:"center",fontWeight:700 }}>{s.students||0}</td>
+              <td><Badge type={s.plan==="School"?"green":s.plan==="Starter"?"gold":s.plan==="Trial"?"blue":"gray"}>{s.plan||"—"}</Badge></td>
               <td><Badge type={s.status==="active"?"green":s.status==="trial"?"blue":s.status==="pending"?"orange":"gray"} dot>{s.status}</Badge></td>
-              <td style={{ textAlign:"center",fontWeight:700 }}>{s.monthlySubmissions}</td>
+              <td style={{ textAlign:"center",fontWeight:700 }}>{s.monthlySubmissions||0}</td>
               <td><div style={{ display:"flex",gap:4 }}>
                 <Btn variant="ghost" sm onClick={()=>{setEditSchool(s);openModal("editSchool");}}>Edit</Btn>
                 {s.status==="pending"&&<Btn variant="green" sm onClick={()=>{setSchools(p=>p.map(x=>x.id===s.id?{...x,status:"trial"}:x));notify(`✅ ${s.name} approved`,"success");}}>Approve</Btn>}
@@ -1639,9 +1878,9 @@ function AdminSchools({ schools, setSchools, notify, openModal, closeModal, moda
         {editSchool&&<div>
           <div className="fg"><label>School Name</label><input defaultValue={editSchool.name} onChange={e=>setEditSchool(p=>({...p,name:e.target.value}))}/></div>
           <div className="g2"><div className="fg"><label>Plan</label><select defaultValue={editSchool.plan} onChange={e=>setEditSchool(p=>({...p,plan:e.target.value}))}><option>School</option><option>Starter</option><option>Trial</option></select></div><div className="fg"><label>Status</label><select defaultValue={editSchool.status} onChange={e=>setEditSchool(p=>({...p,status:e.target.value}))}><option>active</option><option>trial</option><option>pending</option><option>suspended</option></select></div></div>
-          <div className="fg"><label>Contact Email</label><input defaultValue={editSchool.email} onChange={e=>setEditSchool(p=>({...p,email:e.target.value}))}/></div>
-          <div className="fg"><label>Contact Phone</label><input defaultValue={editSchool.contact} onChange={e=>setEditSchool(p=>({...p,contact:e.target.value}))}/></div>
-          <div className="fg"><label>Admin Notes</label><textarea placeholder="Internal notes about this school..."/></div>
+          <div className="fg"><label>Contact Email</label><input defaultValue={editSchool.email||""} onChange={e=>setEditSchool(p=>({...p,email:e.target.value}))}/></div>
+          <div className="fg"><label>Contact Phone</label><input defaultValue={editSchool.contact||""} onChange={e=>setEditSchool(p=>({...p,contact:e.target.value}))}/></div>
+          <div className="fg"><label>Admin Notes</label><textarea placeholder="Internal notes..."/></div>
           <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:8 }}>
             <Btn variant="ghost" onClick={closeModal}>Cancel</Btn>
             <Btn variant="green" onClick={()=>{setSchools(p=>p.map(x=>x.id===editSchool.id?editSchool:x));notify("✅ School updated","success");closeModal();}}>Save Changes</Btn>
@@ -1671,7 +1910,7 @@ function AdminAssessments({ assessments, setAssessments, notify, search }) {
     <div className="fadeUp">
       <div className="flex jb aic wrap gap2 mb4">
         <div><div style={{ fontFamily:"Syne,sans-serif",fontSize:22,fontWeight:800 }}>Assessment Oversight</div><div className="text-muted">{assessments.length} assessments across all schools</div></div>
-        <Btn variant="ghost" sm onClick={()=>notify("📤 Exporting assessment data...","info")}>Export</Btn>
+        <Btn variant="ghost" sm onClick={()=>notify("📤 Exporting...","info")}>Export</Btn>
       </div>
       <div className="g4 mb4">
         <KpiCard icon="🟢" label="Live" value={assessments.filter(a=>a.status==="live").length} sub="Open for submission" color={G.greenLt} />
@@ -1736,9 +1975,9 @@ function AdminMarking({ notify }) {
         </Card>
         <Card>
           <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:14 }}>Global Marking Rules</div>
-          {[["methodMarks","Award Method Marks","Give partial credit for correct working even when final answer is wrong"],[" partialCredit","Partial Credit for Essays","Allow Claude to award partial marks for partially correct answers"],["spellingLeniency","Spelling Leniency","Don't penalise for minor spelling errors in correct answers"],["showReasoning","Show AI Reasoning","Include Claude's reasoning in feedback shown to students"],["autoRelease","Auto-Release Results","Automatically release results after Claude marks (no teacher review)"]].map(([key,title,desc])=>(
+          {[["methodMarks","Award Method Marks","Give partial credit for correct working even when final answer is wrong"],["partialCredit","Partial Credit for Essays","Allow Claude to award partial marks for partially correct answers"],["spellingLeniency","Spelling Leniency","Don't penalise for minor spelling errors in correct answers"],["showReasoning","Show AI Reasoning","Include Claude's reasoning in feedback shown to students"],["autoRelease","Auto-Release Results","Automatically release results after Claude marks (no teacher review)"]].map(([key,title,desc])=>(
             <div key={key} style={{ display:"flex",alignItems:"flex-start",gap:12,padding:"10px 0",borderBottom:`1px solid ${G.paperWarm}` }}>
-              <Toggle value={config[key.trim()]} onChange={()=>setConfig(p=>({...p,[key.trim()]:!p[key.trim()]}))}/>
+              <Toggle value={config[key]} onChange={()=>setConfig(p=>({...p,[key]:!p[key]}))}/>
               <div><div style={{ fontWeight:600,fontSize:13 }}>{title}</div><div className="text-muted">{desc}</div></div>
             </div>
           ))}
@@ -1747,7 +1986,7 @@ function AdminMarking({ notify }) {
       <Card style={{ marginBottom:14 }}>
         <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:12 }}>CAPS Subject-Specific Prompts for Claude</div>
         <div style={{ background:G.goldPale,border:`1px solid ${G.gold}`,borderRadius:8,padding:10,fontSize:12,marginBottom:14 }}>💡 These prompts are prepended to every Claude marking request for the specified subject.</div>
-        {[["Mathematics","Award method marks for correct substitution into formulas. Accept equivalent algebraic forms. Penalise missing units in final answers."],["Physical Science","Accept both SI and CGS units. Award ECF (error carried forward) marks. Diagrams must be labelled."],["Life Sciences","Accept scientific terminology variations. Award marks for correctly labelled diagrams. Essays must show logical progression."],["English HL","Mark according to CAPS rubric: Content (10), Language (10), Structure (5). Spelling errors capped at -3 marks per essay."]].map(([s,p])=>(
+        {[["Mathematics","Award method marks for correct substitution into formulas. Accept equivalent algebraic forms. Penalise missing units in final answers."],["Physical Science","Accept both SI and CGS units. Award ECF (error carried forward) marks. Diagrams must be labelled."],["Life Sciences","Accept scientific terminology variations. Award marks for correctly labelled diagrams."],["English HL","Mark according to CAPS rubric: Content (10), Language (10), Structure (5). Spelling errors capped at -3 marks."]].map(([s,p])=>(
           <div key={s} style={{ marginBottom:12 }}>
             <div style={{ fontWeight:600,fontSize:13,marginBottom:4 }}>{s}</div>
             <textarea defaultValue={p} style={{ minHeight:60,fontSize:12 }}/>
@@ -1755,8 +1994,8 @@ function AdminMarking({ notify }) {
         ))}
       </Card>
       <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
-        <Btn variant="ghost" onClick={()=>notify("Settings reset to defaults","info")}>Reset to Defaults</Btn>
-        <Btn variant="green" onClick={()=>notify("✅ Claude AI marking configuration saved globally","success")}>Save Global Config</Btn>
+        <Btn variant="ghost" onClick={()=>notify("Settings reset","info")}>Reset to Defaults</Btn>
+        <Btn variant="green" onClick={()=>notify("✅ AI marking config saved","success")}>Save Global Config</Btn>
       </div>
     </div>
   );
@@ -1781,7 +2020,7 @@ function AdminContent({ notify, openModal, closeModal, modal }) {
       <div className="text-muted mb4">Manage CAPS subjects and platform content</div>
       <div className="g2 mb4">
         <Card>
-          <div className="flex jb aic mb3"><div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14 }}>CAPS Subjects</div><Btn variant="ink" sm onClick={()=>notify("+ Add Subject — coming soon","info")}>+ Add</Btn></div>
+          <div className="flex jb aic mb3"><div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14 }}>CAPS Subjects</div><Btn variant="ink" sm onClick={()=>notify("+ Add Subject","info")}>+ Add</Btn></div>
           <div className="tbl-wrap"><table>
             <thead><tr><th>Subject</th><th>Grades</th><th>Assessments</th><th>Avg</th><th>Active</th></tr></thead>
             <tbody>{subjects.map(s=>(
@@ -1790,7 +2029,7 @@ function AdminContent({ notify, openModal, closeModal, modal }) {
                 <td style={{ fontSize:12 }}>{s.grades}</td>
                 <td style={{ textAlign:"center" }}>{s.assessments}</td>
                 <td>{s.assessments>0?<Badge type={s.avgScore>=70?"green":s.avgScore>=50?"gold":"red"}>{s.avgScore}%</Badge>:<span className="text-muted">—</span>}</td>
-                <td><input type="checkbox" checked={s.active} onChange={e=>{setSubjects(p=>p.map(x=>x.id===s.id?{...x,active:e.target.checked}:x));notify(`${s.name} ${e.target.checked?"enabled":"disabled"}`);}}/></td>
+                <td><input type="checkbox" checked={s.active} onChange={e=>{setSubjects(p=>p.map(x=>x.id===s.id?{...x,active:e.target.checked}:x));notify(`${s.name} ${e.target.checked?"enabled":"disabled"}`,"info");}}/></td>
               </tr>
             ))}</tbody>
           </table></div>
@@ -1847,10 +2086,10 @@ function AdminBilling({ schools, setSchools, notify, openModal, closeModal, moda
           <tbody>{schools.map(s=>(
             <tr key={s.id}>
               <td><div style={{ fontWeight:600 }}>{s.name}</div><div style={{ fontSize:11,color:G.inkMuted }}>{s.id} · {s.province}</div></td>
-              <td><Badge type={s.plan==="School"?"green":s.plan==="Starter"?"gold":"gray"}>{s.plan}</Badge></td>
+              <td><Badge type={s.plan==="School"?"green":s.plan==="Starter"?"gold":"gray"}>{s.plan||"—"}</Badge></td>
               <td style={{ fontFamily:"Syne,sans-serif",fontWeight:700 }}>{s.plan==="School"?"R4 500":s.plan==="Starter"?"R800":s.plan==="District"?"Custom":"Free"}</td>
               <td><Badge type={s.status==="active"?"green":s.status==="trial"?"blue":"gray"} dot>{s.status}</Badge></td>
-              <td style={{ fontSize:12,color:G.inkMuted }}>{s.joined}</td>
+              <td style={{ fontSize:12,color:G.inkMuted }}>{s.joined||"—"}</td>
               <td><div style={{ display:"flex",gap:4 }}>
                 <Btn variant="ghost" sm onClick={()=>openModal("changePlan",s)}>Change Plan</Btn>
                 <Btn variant="danger" sm onClick={()=>notify(`⚠️ Subscription cancelled for ${s.name}`)}>Cancel</Btn>
@@ -1863,7 +2102,7 @@ function AdminBilling({ schools, setSchools, notify, openModal, closeModal, moda
         <div>
           <div className="fg"><label>Current Plan</label><input disabled value={modal?.data?.plan||""}/></div>
           <div className="fg"><label>New Plan</label><select><option>Trial</option><option>Starter (R800/mo)</option><option>School (R4 500/mo)</option><option>District (Custom)</option></select></div>
-          <div className="fg"><label>Reason for Change</label><textarea placeholder="e.g. School requested upgrade, renewal discount applied..."/></div>
+          <div className="fg"><label>Reason for Change</label><textarea placeholder="e.g. School requested upgrade..."/></div>
           <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:8 }}>
             <Btn variant="ghost" onClick={closeModal}>Cancel</Btn>
             <Btn variant="green" onClick={()=>{notify("✅ Plan updated and school notified","success");closeModal();}}>Update Plan</Btn>
@@ -1903,8 +2142,8 @@ function AdminAnalytics({ users, schools, assessments, allResults }) {
           <div style={{ fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:14,marginBottom:12 }}>Top Performing Schools</div>
           <div className="tbl-wrap"><table>
             <thead><tr><th>School</th><th>Plan</th><th>Submissions/mo</th></tr></thead>
-            <tbody>{schools.filter(s=>s.status==="active").sort((a,b)=>b.monthlySubmissions-a.monthlySubmissions).slice(0,4).map(s=>(
-              <tr key={s.id}><td><div style={{ fontWeight:600,fontSize:12 }}>{s.name.slice(0,30)}</div></td><td><Badge type={s.plan==="School"?"green":"gold"}>{s.plan}</Badge></td><td style={{ textAlign:"center",fontWeight:700 }}>{s.monthlySubmissions}</td></tr>
+            <tbody>{schools.filter(s=>s.status==="active").sort((a,b)=>(b.monthlySubmissions||0)-(a.monthlySubmissions||0)).slice(0,4).map(s=>(
+              <tr key={s.id}><td><div style={{ fontWeight:600,fontSize:12 }}>{s.name.slice(0,30)}</div></td><td><Badge type={s.plan==="School"?"green":"gold"}>{s.plan}</Badge></td><td style={{ textAlign:"center",fontWeight:700 }}>{s.monthlySubmissions||0}</td></tr>
             ))}</tbody>
           </table></div>
         </Card>
@@ -1973,7 +2212,7 @@ function AdminSettings({ notify }) {
       </div>
       <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
         <Btn variant="danger" onClick={()=>notify("⚠️ Cache cleared","warning")}>Clear Cache</Btn>
-        <Btn variant="ghost" onClick={()=>notify("Settings unchanged")}>Discard</Btn>
+        <Btn variant="ghost" onClick={()=>notify("Settings unchanged","info")}>Discard</Btn>
         <Btn variant="green" onClick={()=>notify("✅ Settings saved globally","success")}>Save All Settings</Btn>
       </div>
     </div>
@@ -2016,7 +2255,7 @@ function AdminSecurity({ notify, users }) {
           <Row label="Data Retention Period" desc="How long student data is kept"><select style={{ width:150,fontSize:12 }}><option>3 years (CAPS)</option><option>5 years</option><option>7 years</option></select></Row>
           <Row label="Data Hosting Region" desc="Where student data is physically stored"><select style={{ width:180,fontSize:12 }}><option>AWS Cape Town (af-south-1)</option><option>Azure SA North (Johannesburg)</option></select></Row>
           <Row label="Information Officer" desc="Registered with SA Information Regulator"><div style={{ fontSize:12,fontWeight:500,color:G.green }}>✅ Registered</div></Row>
-          <Row label="Right to Erasure" desc="Allow data deletion requests under POPIA"><Btn variant="ghost" sm onClick={()=>notify("📧 Configure POPIA erasure workflow — connect backend","info")}>Configure</Btn></Row>
+          <Row label="Right to Erasure" desc="Allow data deletion requests under POPIA"><Btn variant="ghost" sm onClick={()=>notify("📧 Configure POPIA erasure workflow","info")}>Configure</Btn></Row>
         </Card>
       </div>
       <Card style={{ marginBottom:14 }}>
